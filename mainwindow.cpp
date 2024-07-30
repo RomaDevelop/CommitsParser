@@ -14,9 +14,13 @@ using namespace std;
 #include <QHeaderView>
 
 #include "MyQShortings.h"
-#include "MyQDifferend.h"
+#include "MyQDifferent.h"
 #include "MyQFileDir.h"
 #include "MyQDialogs.h"
+
+const int commitStatusCol = 1;
+
+vector<QString> addTextsForCells;
 
 struct GitStatusResult
 {
@@ -79,7 +83,6 @@ vector<GitStatusResult> GitStatus(const QStringList &dirs, void(*progress)(QStri
 			continue;
 		}
 
-
 		if(results.back().errorText.size())
 		{
 			if(results.back().errorText.contains(GitStatusResult::notGitMarker))
@@ -90,7 +93,6 @@ vector<GitStatusResult> GitStatus(const QStringList &dirs, void(*progress)(QStri
 				continue;
 			}
 		}
-
 
 		if(results.back().outputText.size())
 		{
@@ -130,6 +132,7 @@ MainWindow::MainWindow(QWidget *parent)
 	layOutMain->addLayout(layOutTop);
 	layOutMain->addWidget(splitterCenter);
 
+	// left part
 	auto widgetLeft = new QWidget(this);
 	auto widgetRight = new QWidget(this);
 	splitterCenter->addWidget(widgetLeft);
@@ -137,16 +140,13 @@ MainWindow::MainWindow(QWidget *parent)
 	auto loLeft = new QVBoxLayout(widgetLeft);
 	auto loRight = new QVBoxLayout(widgetRight);
 
-	// left part
-	int commitStatusCol = 1;
-
 	loLeft->addWidget(new QLabel("Сканируемые пути",this));
 	textEdit = new QTextEdit(this);
 	loLeft->addWidget(textEdit);
 	textEdit->setFont(basicFont);
 	auto btn = new QPushButton("Сканировать", this);
 	loLeft->addWidget(btn);
-	connect(btn,&QPushButton::clicked,[this, commitStatusCol](){
+	connect(btn,&QPushButton::clicked,[this](){
 		tableWidget->clearContents();
 		auto dirs = textEdit->toPlainText().split('\n');
 		QStringList allDirs;
@@ -154,7 +154,7 @@ MainWindow::MainWindow(QWidget *parent)
 		for(auto &dir:dirs)
 		{
 			if(QDir(dir).exists())
-				allDirs += MQFileDir::GetAllNestedDirs(dir);
+				allDirs += MyQFileDir::GetAllNestedDirs(dir);
 			else badDirs += "\n" + dir;
 		}
 		if(badDirs.size())
@@ -172,18 +172,24 @@ MainWindow::MainWindow(QWidget *parent)
 		auto result = GitStatus(allDirs,progress);
 		tableWidget->clearContents();
 		tableWidget->setRowCount(result.size());
+
+		addTextsForCells.clear();
+		addTextsForCells.resize(result.size());
+
 		for(int i=0; i<(int)result.size(); i++)
 		{
 			tableWidget->setItem(i,0,new QTableWidgetItem(result[i].dir));
 			tableWidget->setItem(i,3,new QTableWidgetItem(result[i].errorText));
 			tableWidget->setItem(i,4,new QTableWidgetItem(result[i].outputText));
 			if(result[i].error.size())
-				tableWidget->setItem(i,1,new QTableWidgetItem(result[i].error));
+				tableWidget->setItem(i,commitStatusCol,new QTableWidgetItem(result[i].error));
 			else
 			{
 				tableWidget->setItem(i,commitStatusCol,new QTableWidgetItem(result[i].commitStatus));
 				tableWidget->setItem(i,2,new QTableWidgetItem(result[i].pushStatus));
 			}
+
+			addTextsForCells[i] = "Output text:\n" + result[i].outputText + "\n\nErrors text:\n" + result[i].errorText;
 		}
 	});
 
@@ -198,11 +204,12 @@ MainWindow::MainWindow(QWidget *parent)
 	});
 	btn = new QPushButton("Скрыть "+GitStatusResult::notGit, this);
 	loRihgtHeader->addWidget(btn);
-	connect(btn,&QPushButton::clicked,[this,commitStatusCol](){
+	connect(btn,&QPushButton::clicked,[this](){
 		for(int i=0; i<tableWidget->rowCount(); i++)
 			if(tableWidget->item(i,commitStatusCol)->text().contains(GitStatusResult::notGit))
 				tableWidget->hideRow(i);
 	});
+
 	tableWidget = new QTableWidget(this);
 	loRight->addWidget(tableWidget);
 	tableWidget->setFont(basicFont);
@@ -211,13 +218,21 @@ MainWindow::MainWindow(QWidget *parent)
 	tableWidget->hideColumn(4);
 	tableWidget->verticalHeader()->hide();
 	tableWidget->horizontalHeader()->setStyleSheet("QHeaderView { border-style: none; border-bottom: 1px solid gray; }");
+	tableWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+	connect(tableWidget, &QTableWidget::cellDoubleClicked, [](int row, int column){
+		if((int)addTextsForCells.size() > row)
+			MyQDialogs::ShowText(addTextsForCells[row],600,300);
+		else qdbg << "addTextsForCells.size() <= row";
+		if(0) qdbg << column;
+	});
 
 	LoadSettings();
 }
 
 void MainWindow::LoadSettings()
 {
-	QSettings settings(MyQDifferent::GetPathToExe() + "/files/settings.ini", QSettings::IniFormat);
+	QSettings settings(MyQDifferent::PathToExe() + "/files/settings.ini", QSettings::IniFormat);
 	this->restoreGeometry(settings.value("geo").toByteArray());
 	splitterCenter->restoreState(settings.value("splitterCenter").toByteArray());
 	textEdit->setPlainText(settings.value("textEdit").toString());
@@ -233,7 +248,7 @@ void MainWindow::LoadSettings()
 
 void MainWindow::closeEvent(QCloseEvent * event)
 {
-	QSettings settings(MyQDifferent::GetPathToExe() + "/files/settings.ini", QSettings::IniFormat);
+	QSettings settings(MyQDifferent::PathToExe() + "/files/settings.ini", QSettings::IniFormat);
 	settings.setValue("geo",saveGeometry());
 	settings.setValue("splitterCenter",splitterCenter->saveState());
 	settings.setValue("textEdit",textEdit->toPlainText());
