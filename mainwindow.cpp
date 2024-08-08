@@ -12,11 +12,13 @@ using namespace std;
 #include <QPushButton>
 #include <QLabel>
 #include <QHeaderView>
+#include <QAction>
 
 #include "MyQShortings.h"
 #include "MyQDifferent.h"
 #include "MyQFileDir.h"
 #include "MyQDialogs.h"
+#include "MyQShellExecute.h"
 
 const int commitStatusCol = 1;
 
@@ -34,9 +36,11 @@ struct GitStatusResult
 	QString commitStatus;
 	QString pushStatus;
 
-	inline static const QString notGit = "not a git repository";
-	inline static const QString notGitMarker = "fatal: not a git repository";
+	static const QString notGit;
+	static const QString notGitMarker;
 };
+const QString GitStatusResult::notGit = "not a git repository";
+const QString GitStatusResult::notGitMarker = "fatal: not a git repository";
 
 vector<GitStatusResult> GitStatus(const QStringList &dirs, void(*progress)(QString))
 {
@@ -226,6 +230,12 @@ MainWindow::MainWindow(QWidget *parent)
 		else qdbg << "addTextsForCells.size() <= row";
 		if(0) qdbg << column;
 	});
+
+	QAction *mShowInExplorer = new QAction("Показать в проводнике", tableWidget);
+	tableWidget->addAction(mShowInExplorer);
+	tableWidget->setContextMenuPolicy(Qt::ActionsContextMenu);
+	connect(mShowInExplorer, &QAction::triggered,
+			[this](){ MyQShellExecute::ShellExecuteFile(tableWidget->item(tableWidget->currentRow(),0)->text()); });
 
 	LoadSettings();
 }
