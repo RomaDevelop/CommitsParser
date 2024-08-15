@@ -16,8 +16,14 @@ class MainWindow : public QWidget
 	QTableWidget *tableWidget;
 public:
 	MainWindow(QWidget *parent = nullptr);
+	void CreateContextMenu();
 	~MainWindow() = default;
 	void closeEvent(QCloseEvent * event);
 	void LoadSettings();
+
+private: signals:
+
+private slots:
+	void SlotScan();
 };
 #endif // MAINWINDOW_H

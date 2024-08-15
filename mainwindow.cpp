@@ -24,6 +24,10 @@ const int commitStatusCol = 1;
 
 vector<QString> addTextsForCells;
 
+namespace ColIndexes {
+	const int dirCol = 0;
+}
+
 struct GitStatusResult
 {
 	QString dir;
@@ -104,6 +108,8 @@ vector<GitStatusResult> GitStatus(const QStringList &dirs, void(*progress)(QStri
 				results.back().commitStatus = "commited";
 			else if(results.back().outputText.contains("no changes added to commit"))
 				results.back().commitStatus = "not commited, not added";
+			else if(results.back().outputText.contains("nothing added to commit but untracked files present"))
+				results.back().commitStatus = "untracked files";
 			else
 			{
 				results.back().commitStatus = "error unknown commit output";
@@ -122,7 +128,14 @@ vector<GitStatusResult> GitStatus(const QStringList &dirs, void(*progress)(QStri
 	return results;
 }
 
-namespace forProgress {
+void ReplaceInTextEdit(QTextEdit *textEdit)
+{
+	auto text = textEdit->toPlainText();
+	text.replace('\\','/');
+	textEdit->setPlainText(text);
+}
+
+namespace forCommitsParser {
 	MainWindow *mainWindowPtr;
 }
 MainWindow::MainWindow(QWidget *parent)
@@ -150,52 +163,7 @@ MainWindow::MainWindow(QWidget *parent)
 	textEdit->setFont(basicFont);
 	auto btn = new QPushButton("Сканировать", this);
 	loLeft->addWidget(btn);
-	connect(btn,&QPushButton::clicked,[this](){
-		tableWidget->clearContents();
-		auto dirs = textEdit->toPlainText().split('\n');
-		QStringList allDirs;
-		QString badDirs;
-		for(auto &dir:dirs)
-		{
-			if(QDir(dir).exists())
-				allDirs += MyQFileDir::GetAllNestedDirs(dir);
-			else badDirs += "\n" + dir;
-		}
-		if(badDirs.size())
-			QMbw(this,"Ошибка","Несуществующие директории:"+badDirs);
-
-		tableWidget->setRowCount(1);
-		tableWidget->showRow(0);
-		tableWidget->setItem(0,0,new QTableWidgetItem);
-		forProgress::mainWindowPtr = this;
-		auto progress = [](QString progress)
-		{
-			forProgress::mainWindowPtr->tableWidget->item(0,0)->setText(progress);
-			forProgress::mainWindowPtr->tableWidget->repaint();
-		};
-		auto result = GitStatus(allDirs,progress);
-		tableWidget->clearContents();
-		tableWidget->setRowCount(result.size());
-
-		addTextsForCells.clear();
-		addTextsForCells.resize(result.size());
-
-		for(int i=0; i<(int)result.size(); i++)
-		{
-			tableWidget->setItem(i,0,new QTableWidgetItem(result[i].dir));
-			tableWidget->setItem(i,3,new QTableWidgetItem(result[i].errorText));
-			tableWidget->setItem(i,4,new QTableWidgetItem(result[i].outputText));
-			if(result[i].error.size())
-				tableWidget->setItem(i,commitStatusCol,new QTableWidgetItem(result[i].error));
-			else
-			{
-				tableWidget->setItem(i,commitStatusCol,new QTableWidgetItem(result[i].commitStatus));
-				tableWidget->setItem(i,2,new QTableWidgetItem(result[i].pushStatus));
-			}
-
-			addTextsForCells[i] = "Output text:\n" + result[i].outputText + "\n\nErrors text:\n" + result[i].errorText;
-		}
-	});
+	connect(btn,&QPushButton::clicked,this,&MainWindow::SlotScan);
 
 	// right part
 	auto loRihgtHeader = new QHBoxLayout;
@@ -231,13 +199,61 @@ MainWindow::MainWindow(QWidget *parent)
 		if(0) qdbg << column;
 	});
 
+	CreateContextMenu();
+
+	LoadSettings();
+}
+
+struct GitCommandResult {
+	bool sucess; QString output; QString error;
+};
+
+GitCommandResult DoGitCommand(QProcess &process, QStringList words)
+{
+	process.start("git", words);
+	if(!process.waitForStarted(1000))
+		return { false, "error waitForStarted", "" };
+	if(!process.waitForFinished(1000))
+		return { false, "error waitForFinished", "" };
+	return {true, process.readAllStandardOutput(), process.readAllStandardError() };
+}
+
+void MainWindow::CreateContextMenu()
+{
 	QAction *mShowInExplorer = new QAction("Показать в проводнике", tableWidget);
 	tableWidget->addAction(mShowInExplorer);
 	tableWidget->setContextMenuPolicy(Qt::ActionsContextMenu);
-	connect(mShowInExplorer, &QAction::triggered,
-			[this](){ MyQShellExecute::ShellExecuteFile(tableWidget->item(tableWidget->currentRow(),0)->text()); });
+	connect(mShowInExplorer, &QAction::triggered,[this](){
+		MyQShellExecute::ShellExecuteFile(tableWidget->item(tableWidget->currentRow(),0)->text());
+	});
 
-	LoadSettings();
+	QAction *mAddCommitPush = new QAction("add, commit, push origin master", tableWidget);
+	tableWidget->addAction(mAddCommitPush);
+	tableWidget->setContextMenuPolicy(Qt::ActionsContextMenu);
+	connect(mAddCommitPush, &QAction::triggered,[this](){
+		QString commit = MyQDialogs::InputText("Введите сообщение коммита:",300,200);
+		if(commit.isEmpty()) { QMbc(this,"Коммит отклонён", "Коммит отклонён, пустое сообщение не допускается"); return; }
+
+		QProcess process;
+		process.setWorkingDirectory(tableWidget->item(tableWidget->currentRow(),ColIndexes::dirCol)->text());
+		auto res = DoGitCommand(process, QStringList() << "add" << ".");
+		if(!res.sucess) { QMbc(this,"Коммит не выполнен", "При выполнении add QProcess ошибки:\n" + res.error); return; }
+		if(!res.error.isEmpty()) { QMbc(this,"Коммит не выполнен", "При выполнении add ошибки:\n" + res.error); return; }
+		if(!res.output.isEmpty()) { QMbc(this,"Коммит не выполнен", "При выполнении add неожиданный вывод:\n" + res.output); return; }
+
+		res = DoGitCommand(process, QStringList() << "commit" << "-m" << commit);
+		if(!res.sucess) { QMbc(this,"Коммит не выполнен", "При выполнении commit QProcess ошибки:\n" + res.error); return; }
+		if(!res.error.isEmpty()) { QMbc(this,"Коммит не выполнен", "При выполнении commit ошибки:\n" + res.error); return; }
+		if(res.output.isEmpty()) { QMbc(this,"Коммит не выполнен", "При выполнении commit пустой вывод"); return; }
+		QMbi(this,"Коммит выполнен", "Вывод при выполнении:\n" + res.output);
+
+		res = DoGitCommand(process, QStringList() << "push" << "origin" << "master");
+		QMbi(this,"Push", res.output + "\n\n\n" + res.error);
+		if(!res.sucess) { QMbc(this,"Коммит не выполнен", "При выполнении push QProcess ошибки:\n" + res.error); return; }
+		if(!res.error.isEmpty()) { QMbc(this,"Push не выполнен", "При выполнении push ошибки:\n" + res.error); return; }
+		if(res.output.isEmpty()) { QMbc(this,"Push не выполнен", "При выполнении push пустой вывод"); return; }
+		QMbi(this,"Push выполнен", "Push при выполнении:\n" + res.output);
+	});
 }
 
 void MainWindow::LoadSettings()
@@ -256,8 +272,60 @@ void MainWindow::LoadSettings()
 	}
 }
 
+void MainWindow::SlotScan()
+{
+	ReplaceInTextEdit(textEdit);
+
+	tableWidget->clearContents();
+	auto dirs = textEdit->toPlainText().split('\n');
+	QStringList allDirs;
+	QString badDirs;
+	for(auto &dir:dirs)
+	{
+		if(QDir(dir).exists())
+			allDirs += MyQFileDir::GetAllNestedDirs(dir);
+		else badDirs += "\n" + dir;
+	}
+	if(badDirs.size())
+		QMbw(this,"Ошибка","Несуществующие директории:"+badDirs);
+
+	tableWidget->setRowCount(1);
+	tableWidget->showRow(0);
+	tableWidget->setItem(0,0,new QTableWidgetItem);
+	forCommitsParser::mainWindowPtr = this;
+	auto progress = [](QString progress)
+	{
+		forCommitsParser::mainWindowPtr->tableWidget->item(0,0)->setText(progress);
+		forCommitsParser::mainWindowPtr->tableWidget->repaint();
+	};
+	auto result = GitStatus(allDirs,progress);
+	tableWidget->clearContents();
+	tableWidget->setRowCount(result.size());
+
+	addTextsForCells.clear();
+	addTextsForCells.resize(result.size());
+
+	for(int i=0; i<(int)result.size(); i++)
+	{
+		tableWidget->setItem(i,ColIndexes::dirCol,new QTableWidgetItem(result[i].dir));
+		tableWidget->setItem(i,3,new QTableWidgetItem(result[i].errorText));
+		tableWidget->setItem(i,4,new QTableWidgetItem(result[i].outputText));
+		if(result[i].error.size())
+			tableWidget->setItem(i,commitStatusCol,new QTableWidgetItem(result[i].error));
+		else
+		{
+			tableWidget->setItem(i,commitStatusCol,new QTableWidgetItem(result[i].commitStatus));
+			tableWidget->setItem(i,2,new QTableWidgetItem(result[i].pushStatus));
+		}
+
+		addTextsForCells[i] = "Output text:\n" + result[i].outputText + "\n\nErrors text:\n" + result[i].errorText;
+	}
+}
+
 void MainWindow::closeEvent(QCloseEvent * event)
 {
+	ReplaceInTextEdit(textEdit);
+
 	QSettings settings(MyQDifferent::PathToExe() + "/files/settings.ini", QSettings::IniFormat);
 	settings.setValue("geo",saveGeometry());
 	settings.setValue("splitterCenter",splitterCenter->saveState());
