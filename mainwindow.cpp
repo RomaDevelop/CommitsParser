@@ -18,7 +18,7 @@ using namespace std;
 #include "MyQDifferent.h"
 #include "MyQFileDir.h"
 #include "MyQDialogs.h"
-#include "MyQShellExecute.h"
+#include "MyQExecute.h"
 
 vector<QString> addTextsForCells;
 
@@ -37,10 +37,12 @@ struct GitStatusResult
 {
 	QString dir;
 
+	bool success;
+
 	QString error;
 
-	QString errorText;
 	QString outputText;
+	QString errorText;
 
 	QString commitStatus;
 	QString pushStatus;
@@ -48,8 +50,65 @@ struct GitStatusResult
 	static const QString notGit;
 	static const QString notGitMarker;
 };
+
+
 const QString GitStatusResult::notGit = "not a git repository";
 const QString GitStatusResult::notGitMarker = "fatal: not a git repository";
+
+GitStatusResult DoGitCommand(QProcess &process, QStringList words)
+{
+	process.start("git", words);
+	if(!process.waitForStarted(1000))
+		return { "", false, "error waitForStarted", "", "", "", "" };
+	if(!process.waitForFinished(1000))
+		return { "", false, "error waitForFinished", "", "", "", "" };
+	return { "", true, "", process.readAllStandardOutput(), process.readAllStandardError(), "", "" };
+}
+
+void DecodeGitCommandResult(GitStatusResult &gitCommandResult)
+{
+	if(gitCommandResult.errorText.isEmpty() && gitCommandResult.outputText.isEmpty())
+	{
+		gitCommandResult.error = "error error.isEmpty() && output.isEmpty()";
+	}
+	if(gitCommandResult.errorText.size() && gitCommandResult.outputText.size())
+	{
+		gitCommandResult.error = "error error.size() && output.size()";
+	}
+
+	if(gitCommandResult.errorText.size())
+	{
+		if(gitCommandResult.errorText.contains(GitStatusResult::notGitMarker))
+			gitCommandResult.commitStatus = GitStatusResult::notGit;
+		else
+		{
+			gitCommandResult.error = "error unknown error ["+gitCommandResult.errorText+"]";
+		}
+	}
+
+	if(gitCommandResult.outputText.size())
+	{
+		if(gitCommandResult.outputText.contains("nothing to commit, working tree clean"))
+			gitCommandResult.commitStatus = Statuses::commited;
+		else if(gitCommandResult.outputText.contains("no changes added to commit"))
+			gitCommandResult.commitStatus = "not commited, not added";
+		else if(gitCommandResult.outputText.contains("nothing added to commit but untracked files present"))
+			gitCommandResult.commitStatus = "untracked files";
+		else
+		{
+			gitCommandResult.commitStatus = "error unknown commit output";
+		}
+
+		if(gitCommandResult.outputText.contains("Your branch is up to date with"))
+			gitCommandResult.pushStatus = Statuses::pushed;
+		else if(gitCommandResult.outputText.contains("Your branch is ahead of"))
+			gitCommandResult.pushStatus = "not pushed";
+		else
+		{
+			gitCommandResult.pushStatus = "error unknown push output";
+		}
+	}
+}
 
 vector<GitStatusResult> GitStatus(const QStringList &dirs, void(*progress)(QString))
 {
@@ -69,67 +128,20 @@ vector<GitStatusResult> GitStatus(const QStringList &dirs, void(*progress)(QStri
 		}
 
 		process.setWorkingDirectory(dirs[i]);
-		process.start("git", QStringList() << "status");
-		if(!process.waitForStarted(1000))
+		auto gitCmdRes = DoGitCommand(process, QStringList() << "status");
+		if(!gitCmdRes.success)
 		{
-			results.back().error = "error waitForStarted";
-			continue;
-		}
-		if(!process.waitForFinished(1000))
-		{
-			results.back().error = "error waitForFinished";
+			if(!gitCmdRes.outputText.isEmpty()) results.back().error = + " outputText("+gitCmdRes.outputText+")";
+			if(!gitCmdRes.errorText.isEmpty()) results.back().error = + " errorText("+gitCmdRes.errorText+")";
 			continue;
 		}
 
-		results.back().errorText = process.readAllStandardError();
-		results.back().outputText = process.readAllStandardOutput();
-
-
-		if(results.back().errorText.isEmpty() && results.back().outputText.isEmpty())
-		{
-			results.back().error = "error error.isEmpty() && output.isEmpty()";
-			continue;
-		}
-		if(results.back().errorText.size() && results.back().outputText.size())
-		{
-			results.back().error = "error error.size() && output.size()";
-			continue;
-		}
-
-		if(results.back().errorText.size())
-		{
-			if(results.back().errorText.contains(GitStatusResult::notGitMarker))
-				results.back().commitStatus = GitStatusResult::notGit;
-			else
-			{
-				results.back().error = "error unknown error";
-				continue;
-			}
-		}
-
-		if(results.back().outputText.size())
-		{
-			if(results.back().outputText.contains("nothing to commit, working tree clean"))
-				results.back().commitStatus = Statuses::commited;
-			else if(results.back().outputText.contains("no changes added to commit"))
-				results.back().commitStatus = "not commited, not added";
-			else if(results.back().outputText.contains("nothing added to commit but untracked files present"))
-				results.back().commitStatus = "untracked files";
-			else
-			{
-				results.back().commitStatus = "error unknown commit output";
-			}
-
-			if(results.back().outputText.contains("Your branch is up to date with"))
-				results.back().pushStatus = Statuses::pushed;
-			else if(results.back().outputText.contains("Your branch is ahead of"))
-				results.back().pushStatus = "not pushed";
-			else
-			{
-				results.back().pushStatus = "error unknown push output";
-			}
-		}
+		DecodeGitCommandResult(gitCmdRes);
+		results.erase(results.begin() + results.size()-1);
+		results.push_back(gitCmdRes);
+		results.back().dir = dirs[i];
 	}
+
 	return results;
 }
 
@@ -209,27 +221,25 @@ MainWindow::MainWindow(QWidget *parent)
 	LoadSettings();
 }
 
-struct GitCommandResult {
-	bool sucess; QString output; QString error;
-};
-
-GitCommandResult DoGitCommand(QProcess &process, QStringList words)
-{
-	process.start("git", words);
-	if(!process.waitForStarted(1000))
-		return { false, "error waitForStarted", "" };
-	if(!process.waitForFinished(1000))
-		return { false, "error waitForFinished", "" };
-	return {true, process.readAllStandardOutput(), process.readAllStandardError() };
-}
-
 void MainWindow::CreateContextMenu()
 {
 	QAction *mShowInExplorer = new QAction("Показать в проводнике", tableWidget);
+	QAction *mUpdate = new QAction("Обновить статус", tableWidget);
 	tableWidget->addAction(mShowInExplorer);
+	tableWidget->addAction(mUpdate);
 	tableWidget->setContextMenuPolicy(Qt::ActionsContextMenu);
 	connect(mShowInExplorer, &QAction::triggered,[this](){
-		MyQShellExecute::ShellExecuteFile(tableWidget->item(tableWidget->currentRow(),0)->text());
+		MyQExecute::OpenDir(tableWidget->item(tableWidget->currentRow(),0)->text());
+	});
+
+	connect(mUpdate, &QAction::triggered,[this](){
+		QString dir = tableWidget->item(tableWidget->currentRow(),ColIndexes::directory)->text();
+		QProcess process;
+		process.setWorkingDirectory(dir);
+		auto res = DoGitCommand(process, QStringList() << "status");
+		DecodeGitCommandResult(res);
+		res.dir = dir;
+		SetRow(tableWidget->currentRow(),res);
 	});
 
 	if(0)
@@ -237,29 +247,29 @@ void MainWindow::CreateContextMenu()
 		QAction *mAddCommitPush = new QAction("add, commit, push origin master", tableWidget);
 		tableWidget->addAction(mAddCommitPush);
 		tableWidget->setContextMenuPolicy(Qt::ActionsContextMenu);
-		connect(mAddCommitPush, &QAction::triggered,[this](){
-			QString commit = MyQDialogs::InputText("Введите сообщение коммита:",300,200);
-			if(commit.isEmpty()) { QMbc(this,"Коммит отклонён", "Коммит отклонён, пустое сообщение не допускается"); return; }
+		connect(mAddCommitPush, &QAction::triggered,[](){
+//			QString commit = MyQDialogs::InputText("Введите сообщение коммита:",300,200);
+//			if(commit.isEmpty()) { QMbc(this,"Коммит отклонён", "Коммит отклонён, пустое сообщение не допускается"); return; }
 
-			QProcess process;
-			process.setWorkingDirectory(tableWidget->item(tableWidget->currentRow(),ColIndexes::directory)->text());
-			auto res = DoGitCommand(process, QStringList() << "add" << ".");
-			if(!res.sucess) { QMbc(this,"Коммит не выполнен", "При выполнении add QProcess ошибки:\n" + res.error); return; }
-			if(!res.error.isEmpty()) { QMbc(this,"Коммит не выполнен", "При выполнении add ошибки:\n" + res.error); return; }
-			if(!res.output.isEmpty()) { QMbc(this,"Коммит не выполнен", "При выполнении add неожиданный вывод:\n" + res.output); return; }
+//			QProcess process;
+//			process.setWorkingDirectory(tableWidget->item(tableWidget->currentRow(),ColIndexes::directory)->text());
+//			auto res = DoGitCommand(process, QStringList() << "add" << ".");
+//			if(!res.success) { QMbc(this,"Коммит не выполнен", "При выполнении add QProcess ошибки:\n" + res.error); return; }
+//			if(!res.error.isEmpty()) { QMbc(this,"Коммит не выполнен", "При выполнении add ошибки:\n" + res.error); return; }
+//			if(!res.output.isEmpty()) { QMbc(this,"Коммит не выполнен", "При выполнении add неожиданный вывод:\n" + res.output); return; }
 
-			res = DoGitCommand(process, QStringList() << "commit" << "-m" << commit);
-			if(!res.sucess) { QMbc(this,"Коммит не выполнен", "При выполнении commit QProcess ошибки:\n" + res.error); return; }
-			if(!res.error.isEmpty()) { QMbc(this,"Коммит не выполнен", "При выполнении commit ошибки:\n" + res.error); return; }
-			if(res.output.isEmpty()) { QMbc(this,"Коммит не выполнен", "При выполнении commit пустой вывод"); return; }
-			QMbi(this,"Коммит выполнен", "Вывод при выполнении:\n" + res.output);
+//			res = DoGitCommand(process, QStringList() << "commit" << "-m" << commit);
+//			if(!res.success) { QMbc(this,"Коммит не выполнен", "При выполнении commit QProcess ошибки:\n" + res.error); return; }
+//			if(!res.error.isEmpty()) { QMbc(this,"Коммит не выполнен", "При выполнении commit ошибки:\n" + res.error); return; }
+//			if(res.output.isEmpty()) { QMbc(this,"Коммит не выполнен", "При выполнении commit пустой вывод"); return; }
+//			QMbi(this,"Коммит выполнен", "Вывод при выполнении:\n" + res.output);
 
-			res = DoGitCommand(process, QStringList() << "push" << "origin" << "master");
-			QMbi(this,"Push", res.output + "\n\n\n" + res.error);
-			if(!res.sucess) { QMbc(this,"Коммит не выполнен", "При выполнении push QProcess ошибки:\n" + res.error); return; }
-			if(!res.error.isEmpty()) { QMbc(this,"Push не выполнен", "При выполнении push ошибки:\n" + res.error); return; }
-			if(res.output.isEmpty()) { QMbc(this,"Push не выполнен", "При выполнении push пустой вывод"); return; }
-			QMbi(this,"Push выполнен", "Push при выполнении:\n" + res.output);
+//			res = DoGitCommand(process, QStringList() << "push" << "origin" << "master");
+//			QMbi(this,"Push", res.output + "\n\n\n" + res.error);
+//			if(!res.success) { QMbc(this,"Коммит не выполнен", "При выполнении push QProcess ошибки:\n" + res.error); return; }
+//			if(!res.error.isEmpty()) { QMbc(this,"Push не выполнен", "При выполнении push ошибки:\n" + res.error); return; }
+//			if(res.output.isEmpty()) { QMbc(this,"Push не выполнен", "При выполнении push пустой вывод"); return; }
+//			QMbi(this,"Push выполнен", "Push при выполнении:\n" + res.output);
 		});
 	}
 }
@@ -278,6 +288,29 @@ void MainWindow::LoadSettings()
 			tableWidget->setColumnWidth(i,settings.value("col"+QSn(i)).toInt());
 		}
 	}
+}
+
+void MainWindow::SetRow(int row, const GitStatusResult & gitStatusResult)
+{
+	tableWidget->setItem(row, ColIndexes::directory,new QTableWidgetItem(gitStatusResult.dir));
+	tableWidget->setItem(row, 3, new QTableWidgetItem(gitStatusResult.errorText));
+	tableWidget->setItem(row, 4, new QTableWidgetItem(gitStatusResult.outputText));
+	if(gitStatusResult.error.size())
+		tableWidget->setItem(row, ColIndexes::commitStatus,new QTableWidgetItem(gitStatusResult.error));
+	else
+	{
+		tableWidget->setItem(row, ColIndexes::commitStatus,new QTableWidgetItem(gitStatusResult.commitStatus));
+		tableWidget->setItem(row, ColIndexes::pushStatus,new QTableWidgetItem(gitStatusResult.pushStatus));
+	}
+
+	if(tableWidget->item(row,ColIndexes::commitStatus)->text() == Statuses::commited
+			&& tableWidget->item(row,ColIndexes::pushStatus)->text() == Statuses::pushed)
+	{
+		for (int col = 0; col < tableWidget->columnCount(); ++col)
+			tableWidget->item(row,col)->setBackground(QColor(146,208,80));
+	}
+
+	addTextsForCells[row] = "Output text:\n" + gitStatusResult.outputText + "\n\nErrors text:\n" + gitStatusResult.errorText;
 }
 
 void MainWindow::SlotScan()
@@ -315,25 +348,7 @@ void MainWindow::SlotScan()
 
 	for(int i=0; i<(int)result.size(); i++)
 	{
-		tableWidget->setItem(i, ColIndexes::directory,new QTableWidgetItem(result[i].dir));
-		tableWidget->setItem(i, 3, new QTableWidgetItem(result[i].errorText));
-		tableWidget->setItem(i, 4, new QTableWidgetItem(result[i].outputText));
-		if(result[i].error.size())
-			tableWidget->setItem(i, ColIndexes::commitStatus,new QTableWidgetItem(result[i].error));
-		else
-		{
-			tableWidget->setItem(i, ColIndexes::commitStatus,new QTableWidgetItem(result[i].commitStatus));
-			tableWidget->setItem(i, ColIndexes::pushStatus,new QTableWidgetItem(result[i].pushStatus));
-		}
-
-		if(tableWidget->item(i,ColIndexes::commitStatus)->text() == Statuses::commited
-				&& tableWidget->item(i,ColIndexes::pushStatus)->text() == Statuses::pushed)
-		{
-			for (int col = 0; col < tableWidget->columnCount(); ++col)
-				tableWidget->item(i,col)->setBackground(QColor(146,208,80));
-		}
-
-		addTextsForCells[i] = "Output text:\n" + result[i].outputText + "\n\nErrors text:\n" + result[i].errorText;
+		SetRow(i, result[i]);
 	}
 }
 

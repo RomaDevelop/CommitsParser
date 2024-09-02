@@ -7,6 +7,8 @@
 #include <QTextEdit>
 #include <QTableWidget>
 
+struct GitStatusResult;
+
 class MainWindow : public QWidget
 {
 	Q_OBJECT
@@ -20,6 +22,8 @@ public:
 	~MainWindow() = default;
 	void closeEvent(QCloseEvent * event);
 	void LoadSettings();
+
+	void SetRow(int row, const GitStatusResult &gitStatusResult);
 
 private: signals:
 
