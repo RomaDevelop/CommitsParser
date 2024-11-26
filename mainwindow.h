@@ -7,7 +7,7 @@
 #include <QTextEdit>
 #include <QTableWidget>
 
-struct GitStatusResult;
+struct GitStatus;
 
 class MainWindow : public QWidget
 {
@@ -23,7 +23,7 @@ public:
 	void closeEvent(QCloseEvent * event);
 	void LoadSettings();
 
-	void SetRow(int row, const GitStatusResult &gitStatusResult);
+	void SetRow(int row, const GitStatus &gitStatusResult);
 
 private: signals:
 

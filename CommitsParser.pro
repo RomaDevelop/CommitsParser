@@ -3,10 +3,12 @@ QT += core gui widgets
 CONFIG += c++17
 
 SOURCES += \
+    git.cpp \
     main.cpp \
     mainwindow.cpp
 
 HEADERS += \
+    git.h \
     mainwindow.h
 
 INCLUDEPATH += ../include
