@@ -1,6 +1,17 @@
 #include "git.h"
 
 
+QString GitStatus::RemoteRepoNames() const
+{
+	QString ret;
+	for(auto &remoteRepo:remoteRepos)
+	{
+		ret += remoteRepo.name + " ";
+	}
+	while(ret.endsWith(" ")) ret.chop(1);
+	return ret;
+}
+
 QString GitStatus::ToStr()
 {
 	return "dir " + dir
@@ -14,10 +25,16 @@ GitStatus Git::DoGitCommand(QProcess & process, QStringList words)
 {
 	process.start("git", words);
 	if(!process.waitForStarted(1000))
-		return { "", false, "error waitForStarted", "", "", "", "", {} };
-	if(!process.waitForFinished(1000))
-		return { "", false, "error waitForFinished", "", "", "", "", {} };
-	return { process.workingDirectory(), true, "", process.readAllStandardOutput(), process.readAllStandardError(), "", "", {} };
+	{
+		qdbg << "error waitForStarted " + words.join(" ");
+		return { "", false, "error waitForStarted", "", "", "", "", {}};
+	}
+	if(!process.waitForFinished(10000))
+	{
+		qdbg << "error waitForFinished " + words.join(" ");
+		return { "", false, "error waitForFinished", "", "", "", "", {}};
+	}
+	return { process.workingDirectory(), true, "", process.readAllStandardOutput(), process.readAllStandardError(), "", "", {}};
 }
 
 GitStatus Git::DoGitCommand(QString dirFrom, QString command)
@@ -86,35 +103,80 @@ std::vector<GitStatus> Git::GetGitStatus(const QStringList & dirs, void (*progre
 	for(int i=0; i<(int)dirs.size(); i++)
 	{
 		progress("git status did " + QSn(i) + " from " + QSn(dirs.size()));
-		results.push_back(GitStatus());
-		results.back().dir = dirs[i];
+		results.emplace_back(GetGitStatusForOneDir(process, dirs[i]));
 
-		if(!QDir(dirs[i]+"/.git").exists())
-		{
-			results.back().commitStatus = GitStatus::notGit;
-			continue;
-		}
-
-		process.setWorkingDirectory(dirs[i]);
-		auto gitCmdRes = DoGitCommand(process, QStringList() << "status");
-		if(!gitCmdRes.success)
-		{
-			if(!gitCmdRes.standartOutput.isEmpty()) results.back().error = + " outputText("+gitCmdRes.standartOutput+")";
-			if(!gitCmdRes.errorOutput.isEmpty()) results.back().error = + " errorText("+gitCmdRes.errorOutput+")";
-			continue;
-		}
-
-		DecodeGitCommandResult(gitCmdRes);
-		results.erase(results.begin() + results.size()-1);
-		results.push_back(gitCmdRes);
-		results.back().dir = dirs[i];
-
-		gitCmdRes = DoGitCommand(process, QStringList() << "remote");
-		if(gitCmdRes.success && gitCmdRes.errorOutput.isEmpty())
-			results.back().remoteReposes = gitCmdRes.standartOutput.split("\n", QString::SkipEmptyParts);
+//		for(auto &remoteRepo:results.back().remoteReposes)
+//		{
+//			gitCmdRes = DoGitCommand(process, QStringList() << "diff" << "--name-status" << "master" << remoteRepo+"/master");
+//			if(!(gitCmdRes.standartOutput.isEmpty() && gitCmdRes.errorOutput.isEmpty()))
+//			{
+//				qdbg << "___________________________";
+//				qdbg << dirs[i];
+//				qdbg << remoteRepo;
+//				qdbg << "success		" << gitCmdRes.success;
+//				qdbg << "standartOutput	" << gitCmdRes.standartOutput;
+//				qdbg << "errorOutput	" << gitCmdRes.errorOutput;
+//			}
+//		}
 	}
 
 	return results;
 }
+
+GitStatus Git::GetGitStatusForOneDir(QProcess &process, const QString &dir)
+{
+	GitStatus gitStatus;
+	gitStatus.dir = dir;
+
+	if(!QDir(dir+"/.git").exists())
+	{
+		gitStatus.commitStatus = GitStatus::notGit;
+		return gitStatus;
+	}
+
+	process.setWorkingDirectory(dir);
+	auto gitCmdRes = DoGitCommand(process, QStringList() << "status");
+	if(!gitCmdRes.success)
+	{
+		if(!gitCmdRes.standartOutput.isEmpty()) gitStatus.error = + " outputText("+gitCmdRes.standartOutput+")";
+		if(!gitCmdRes.errorOutput.isEmpty()) gitStatus.error = + " errorText("+gitCmdRes.errorOutput+")";
+		return gitStatus;
+	}
+
+	DecodeGitCommandResult(gitCmdRes);
+	gitStatus = gitCmdRes;
+
+	gitCmdRes = DoGitCommand(process, QStringList() << "remote");
+	if(gitCmdRes.success && gitCmdRes.errorOutput.isEmpty())
+	{
+		auto names = gitCmdRes.standartOutput.split("\n", QString::SkipEmptyParts);
+		for(auto &name:names)
+		{
+			RemoteRepo &newRepo = gitStatus.remoteRepos.emplace_back();
+			newRepo.name = std::move(name);
+
+//			auto fetchRes = DoGitCommand(process, QStringList() << "fetch" << newRepo.name);
+//			if(fetchRes.success && fetchRes.errorOutput.isEmpty()) newRepo.fetchRes = fetchRes.standartOutput;
+//			else newRepo.errors += "fetch error\n";
+
+//			auto diffRes = DoGitCommand(process, QStringList() << "fetch" << newRepo.name);
+//			if(diffRes.success && diffRes.errorOutput.isEmpty()) newRepo.diffRes = diffRes.standartOutput;
+//			else newRepo.errors += "diff error\n";
+
+//			if(newRepo.errors.isEmpty() && newRepo.fetchRes.isEmpty() && newRepo.diffRes.isEmpty())
+//			{
+//				newRepo.updated = true;
+//			}
+		}
+	}
+	else
+	{
+		RemoteRepo &newRepo = gitStatus.remoteRepos.emplace_back();
+		newRepo.errors = "remote error\n";
+	}
+
+	return gitStatus;
+}
+
 
 

@@ -132,12 +132,8 @@ void MainWindow::CreateContextMenu()
 		QString dir = tableWidget->item(tableWidget->currentRow(),ColIndexes::directory)->text();
 		QProcess process;
 		process.setWorkingDirectory(dir);
-		auto res = Git::DoGitCommand(process, QStringList() << "status");
-		auto res2 = Git::DoGitCommand(process, QStringList() << "remote");
-		Git::DecodeGitCommandResult(res);
-		res.dir = dir;
-		res.remoteReposes = res2.standartOutput.split("\n", QString::SkipEmptyParts);
-		SetRow(tableWidget->currentRow(),res);
+		auto gitStatus = Git::GetGitStatusForOneDir(process, dir);
+		SetRow(tableWidget->currentRow(),gitStatus);
 	});
 
 	// add, commit, push origin master
@@ -196,7 +192,7 @@ void MainWindow::SetRow(int row, const GitStatus & gitStatusResult)
 		tableWidget->setItem(row, ColIndexes::commitStatus,new QTableWidgetItem(gitStatusResult.commitStatus));
 		tableWidget->setItem(row, ColIndexes::pushStatus,new QTableWidgetItem(gitStatusResult.pushStatus));
 	}
-	tableWidget->setItem(row, ColIndexes::remoteRepos		, new QTableWidgetItem(gitStatusResult.remoteReposes.join(' ')));
+	tableWidget->setItem(row, ColIndexes::remoteRepos		, new QTableWidgetItem(gitStatusResult.RemoteRepoNames()));
 	tableWidget->setItem(row, ColIndexes::errorOutput		, new QTableWidgetItem(gitStatusResult.errorOutput));
 	tableWidget->setItem(row, ColIndexes::standartOutput	, new QTableWidgetItem(gitStatusResult.standartOutput));
 

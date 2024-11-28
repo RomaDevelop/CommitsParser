@@ -15,6 +15,15 @@ namespace Statuses {
 	const QString pushed = "pushed";
 }
 
+struct RemoteRepo
+{
+	QString name;
+	QString errors;
+	QString fetchRes;
+	QString diffRes;
+	bool updated = false;
+};
+
 struct GitStatus
 {
 	QString dir;
@@ -29,7 +38,8 @@ struct GitStatus
 	QString commitStatus;
 	QString pushStatus;
 
-	QStringList remoteReposes;
+	std::vector<RemoteRepo> remoteRepos;
+	QString RemoteRepoNames() const;
 
 	inline static const QString notGit = "not a git repository";
 	inline static const QString notGitMarker = "fatal: not a git repository";
@@ -45,6 +55,7 @@ struct Git
 	static void DecodeGitCommandResult(GitStatus &gitCommandResult);
 
 	static std::vector<GitStatus> GetGitStatus(const QStringList &dirs, void(*progress)(QString));
+	static GitStatus GetGitStatusForOneDir(QProcess &process, const QString &dir);
 };
 
 #endif // GIT_H
