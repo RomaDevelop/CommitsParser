@@ -26,8 +26,9 @@ namespace ColIndexes {
 	const int remoteRepos		= pushStatus+1;
 	const int errorOutput		= remoteRepos+1;
 	const int standartOutput	= errorOutput+1;
+	const int remoteOutput		= standartOutput+1;
 
-	const int colCount = standartOutput + 1;
+	const int colCount = remoteOutput + 1;
 }
 
 void ReplaceInTextEdit(QTextEdit *textEdit)
@@ -100,6 +101,7 @@ MainWindow::MainWindow(QWidget *parent)
 	tableWidget->setColumnCount(ColIndexes::colCount);
 	tableWidget->hideColumn(ColIndexes::errorOutput);
 	tableWidget->hideColumn(ColIndexes::standartOutput);
+	tableWidget->hideColumn(ColIndexes::remoteOutput);
 	tableWidget->verticalHeader()->hide();
 	tableWidget->horizontalHeader()->setStyleSheet("QHeaderView { border-style: none; border-bottom: 1px solid gray; }");
 	tableWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -109,6 +111,8 @@ MainWindow::MainWindow(QWidget *parent)
 		if(auto item = tableWidget->item(row, ColIndexes::standartOutput)) text += item->text();
 		text += "\n\nErrors text:\n";
 		if(auto item = tableWidget->item(row, ColIndexes::errorOutput)) text += item->text();
+		text += "\n\nRemote repos text:\n";
+		if(auto item = tableWidget->item(row, ColIndexes::remoteOutput)) text += item->text();
 		MyQDialogs::ShowText(text,600,300);
 	});
 
@@ -121,8 +125,10 @@ void MainWindow::CreateContextMenu()
 {
 	QAction *mShowInExplorer = new QAction("Показать в проводнике", tableWidget);
 	QAction *mUpdate = new QAction("Обновить статус", tableWidget);
+	QAction *mUpdateRemote = new QAction("Обновить статус удалённых", tableWidget);
 	tableWidget->addAction(mShowInExplorer);
 	tableWidget->addAction(mUpdate);
+	tableWidget->addAction(mUpdateRemote);
 	tableWidget->setContextMenuPolicy(Qt::ActionsContextMenu);
 	connect(mShowInExplorer, &QAction::triggered,[this](){
 		MyQExecute::OpenDir(tableWidget->item(tableWidget->currentRow(),0)->text());
@@ -135,6 +141,90 @@ void MainWindow::CreateContextMenu()
 		auto gitStatus = Git::GetGitStatusForOneDir(process, dir);
 		SetRow(tableWidget->currentRow(),gitStatus);
 	});
+
+	connect(mUpdateRemote, &QAction::triggered,[this](){
+		tableWidget->item(tableWidget->currentRow(),ColIndexes::remoteRepos)->setBackground(QColor(255,255,255));
+
+		QString dir = tableWidget->item(tableWidget->currentRow(),ColIndexes::directory)->text();
+		QStringList remotes = tableWidget->item(tableWidget->currentRow(),ColIndexes::remoteRepos)->text().split(' ',QString::SkipEmptyParts);
+		std::vector<int> updated;
+		const int undefined = 1;
+		const int fetchEmpty = 1;
+		const int fetchAndDiffEmpty = 3;
+		QProcess process;
+		process.setWorkingDirectory(dir);
+
+		QString result;
+		for(auto &remote:remotes)
+		{
+			int &curUpdated = updated.emplace_back(undefined);
+			result += "\n\nstart work with " + remote + "\n";
+			bool stop = false;
+			bool stopAll = false;
+			bool did = false;
+			while(!stop && !did)
+			{
+				result += "git fetch " + remote + "\n";
+				auto fetchRes = Git::DoGitCommand(process, QStringList() << "fetch" << remote);
+				if(fetchRes.success && fetchRes.errorOutput.isEmpty())
+				{
+					result += fetchRes.standartOutput;
+					if(fetchRes.standartOutput.isEmpty()) { result += "fetch empty result\n"; curUpdated = fetchEmpty; }
+					did = true;
+				}
+				else
+				{
+					if(!fetchRes.error.isEmpty()) result += "fetch error:\n" + fetchRes.error + "\n";
+					if(!fetchRes.errorOutput.isEmpty()) result += "fetch errorOutput:\n" + fetchRes.errorOutput + "\n";
+					auto res = MyQDialogs::CustomDialog("Ошибка при выполнении fetch",
+														"Ошибка при выполнении fetch:\n" + fetchRes.error + "\n" + fetchRes.errorOutput,
+														{"Повторить", "Пропустить", "Пропустить всё"});
+					if(res == "Повторить") {}
+					else if(res == "Пропустить") { stop = true; }
+					else if(res == "Пропустить всё") { stop = true; stopAll = true; }
+					else QMbc(0,"","wrong answ [" + res + "]");
+				}
+				if(stop) break;
+			}
+			if(stopAll) break;
+
+			stop = did = false;
+			while(!stop && !did)
+			{
+				result += "git diff --name-status master "+remote+"/master\n";
+				auto difRes = Git::DoGitCommand(process, QStringList() << "diff" << "--name-status" << "master" <<  remote+"/master");
+				if(difRes.success && difRes.errorOutput.isEmpty())
+				{
+					result += difRes.standartOutput;
+					if(difRes.standartOutput.isEmpty()) { result += "diff empty result\n"; if(curUpdated == fetchEmpty) curUpdated = fetchAndDiffEmpty; }
+					did = true;
+				}
+				else
+				{
+					if(!difRes.error.isEmpty()) result += "diff error:\n" + difRes.error + "\n";
+					if(!difRes.errorOutput.isEmpty()) result += "diff errorOutput:\n" + difRes.errorOutput + "\n";
+					auto res = MyQDialogs::CustomDialog("Ошибка при выполнении diff",
+														"Ошибка при выполнении diff:\n" + difRes.error + "\n" + difRes.errorOutput,
+														{"Повторить", "Пропустить", "Пропустить всё"});
+					if(res == "Повторить") {}
+					else if(res == "Пропустить") { stop = true; }
+					else if(res == "Пропустить всё") { stop = true; stopAll = true; }
+					else QMbc(0,"","wrong answ [" + res + "]");
+				}
+				if(stop) { stop = false; break; }
+			}
+			if(stopAll) break;
+		}
+
+		tableWidget->item(tableWidget->currentRow(),ColIndexes::remoteOutput)->setText(result);
+
+		QColor color(146,208,80);
+		for(auto &update:updated) if(update != fetchAndDiffEmpty) { color = {208,146,80}; break; }
+		tableWidget->item(tableWidget->currentRow(),ColIndexes::remoteRepos)->setBackground(color);
+		tableWidget->setCurrentCell(tableWidget->currentRow(),0);
+	});
+
+
 
 	// add, commit, push origin master
 //	QAction *mAddCommitPush = new QAction("add, commit, push origin master", tableWidget);
@@ -195,12 +285,14 @@ void MainWindow::SetRow(int row, const GitStatus & gitStatusResult)
 	tableWidget->setItem(row, ColIndexes::remoteRepos		, new QTableWidgetItem(gitStatusResult.RemoteRepoNames()));
 	tableWidget->setItem(row, ColIndexes::errorOutput		, new QTableWidgetItem(gitStatusResult.errorOutput));
 	tableWidget->setItem(row, ColIndexes::standartOutput	, new QTableWidgetItem(gitStatusResult.standartOutput));
+	tableWidget->setItem(row, ColIndexes::remoteOutput		, new QTableWidgetItem);
 
 	if(tableWidget->item(row,ColIndexes::commitStatus)->text() == Statuses::commited
 			&& tableWidget->item(row,ColIndexes::pushStatus)->text() == Statuses::pushed)
 	{
-		for (int col = 0; col < tableWidget->columnCount(); ++col)
-			tableWidget->item(row,col)->setBackground(QColor(146,208,80));
+		tableWidget->item(row,ColIndexes::directory)->setBackground(QColor(146,208,80));
+		tableWidget->item(row,ColIndexes::commitStatus)->setBackground(QColor(146,208,80));
+		tableWidget->item(row,ColIndexes::pushStatus)->setBackground(QColor(146,208,80));
 	}
 }
 

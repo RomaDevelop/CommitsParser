@@ -154,19 +154,6 @@ GitStatus Git::GetGitStatusForOneDir(QProcess &process, const QString &dir)
 		{
 			RemoteRepo &newRepo = gitStatus.remoteRepos.emplace_back();
 			newRepo.name = std::move(name);
-
-//			auto fetchRes = DoGitCommand(process, QStringList() << "fetch" << newRepo.name);
-//			if(fetchRes.success && fetchRes.errorOutput.isEmpty()) newRepo.fetchRes = fetchRes.standartOutput;
-//			else newRepo.errors += "fetch error\n";
-
-//			auto diffRes = DoGitCommand(process, QStringList() << "fetch" << newRepo.name);
-//			if(diffRes.success && diffRes.errorOutput.isEmpty()) newRepo.diffRes = diffRes.standartOutput;
-//			else newRepo.errors += "diff error\n";
-
-//			if(newRepo.errors.isEmpty() && newRepo.fetchRes.isEmpty() && newRepo.diffRes.isEmpty())
-//			{
-//				newRepo.updated = true;
-//			}
 		}
 	}
 	else
