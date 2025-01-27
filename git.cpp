@@ -14,11 +14,20 @@ QString GitStatus::RemoteRepoNames() const
 
 QString GitStatus::ToStr()
 {
-	return "dir " + dir
-			+ "\n success " + QSn(success)
-			+ "\n error " + error
-			+ "\n outputText " + standartOutput
-			+ "\n errorText " + errorOutput;
+	return "dir: " + dir
+			+ "\nsuccess: " + QSn(success)
+			+ "\nerror: " + (error.isEmpty() ? "empty" : "\n"+error+"\n")
+			+ "\noutputText: " + (standartOutput.isEmpty() ? "empty" : "\n"+standartOutput+"\n")
+			+ "\nerrorText: " + (errorOutput.isEmpty() ? "empty" : "\n"+errorOutput+"\n");
+}
+
+QString GitStatus::ToStr2()
+{
+	QString str = "dir: " + dir + (success ? "\nsuccess" : "\nunsuccess");
+	if(!error.isEmpty()) str += "\nerror: "+error;
+	if(!standartOutput.isEmpty()) str += "\nstandartOutput: "+standartOutput;
+	if(!errorOutput.isEmpty()) str += "\nerrorOutput: "+errorOutput;
+	return str;
 }
 
 GitStatus Git::DoGitCommand(QProcess & process, QStringList words)

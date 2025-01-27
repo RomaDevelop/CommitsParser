@@ -25,6 +25,8 @@ public:
 
 	void SetRow(int row, const GitStatus &gitStatusResult);
 
+	void SlotUpdateRemote();
+
 private: signals:
 
 private slots:

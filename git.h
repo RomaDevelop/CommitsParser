@@ -45,6 +45,7 @@ struct GitStatus
 	inline static const QString notGitMarker = "fatal: not a git repository";
 
 	QString ToStr();
+	QString ToStr2();
 };
 
 struct Git
