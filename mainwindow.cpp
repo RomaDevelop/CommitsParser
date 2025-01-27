@@ -183,7 +183,7 @@ void MainWindow::CreateContextMenu()
 		if(remote == "Cancel push") return;
 
 		//GitStatus pushRes = Git::DoGitCommand2(dir, QStringList() << "push" << remote << "master");
-		GitStatus pushRes = Git::DoGitCommand2(dir, QStringList() << "push" /*<< "--recurse-submodules=check"*/ << "--progress" << remote << "master");
+		GitStatus pushRes = Git::DoGitCommand2(dir, QStringList() << "push" << "--recurse-submodules=check"/* << "--progress"*/ << remote << "master");
 		QString textRes = "git push " + remote + " master\n" + pushRes.ToStr2();
 		if(!(pushRes.success && pushRes.error.isEmpty() && pushRes.errorOutput.isEmpty()))
 			textRes.prepend("Attention! There were errors while executing commands!\n\n");
