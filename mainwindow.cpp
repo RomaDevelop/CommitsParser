@@ -126,14 +126,16 @@ void MainWindow::CreateContextMenu()
 	tableWidget->setContextMenuPolicy(Qt::ActionsContextMenu);
 
 	QAction *mShowInExplorer = new QAction("Показать в проводнике", tableWidget);
-	QAction *mUpdate = new QAction("Обновить статус", tableWidget);
+	QAction *mUpdateLocal = new QAction("Обновить локальный статус", tableWidget);
 	QAction *mUpdateRemote = new QAction("Обновить статус удалённых", tableWidget);
+	QAction *mUpdateLocalAndRemote = new QAction("Обновить статус локальный и удалённых", tableWidget);
 	QAction *mAddAndCommit = new QAction("add and commit all", tableWidget);
 	QAction *mPush = new QAction("push", tableWidget);
 
 	tableWidget->addAction(mShowInExplorer);
-	tableWidget->addAction(mUpdate);
+	tableWidget->addAction(mUpdateLocal);
 	tableWidget->addAction(mUpdateRemote);
+	tableWidget->addAction(mUpdateLocalAndRemote);
 
 	tableWidget->addAction(new QAction);
 	tableWidget->actions().back()->setSeparator(true);
@@ -145,7 +147,7 @@ void MainWindow::CreateContextMenu()
 		MyQExecute::OpenDir(tableWidget->item(tableWidget->currentRow(),0)->text());
 	});
 
-	connect(mUpdate, &QAction::triggered,[this](){
+	connect(mUpdateLocal, &QAction::triggered,[this](){
 		QString dir = tableWidget->item(tableWidget->currentRow(),ColIndexes::directory)->text();
 		QProcess process;
 		process.setWorkingDirectory(dir);
@@ -155,7 +157,12 @@ void MainWindow::CreateContextMenu()
 
 	connect(mUpdateRemote, &QAction::triggered, this, &MainWindow::SlotUpdateRemote);
 
-	connect(mAddAndCommit, &QAction::triggered,[this, mUpdate](){
+	connect(mUpdateLocalAndRemote, &QAction::triggered, [mUpdateLocal, mUpdateRemote](){
+		mUpdateLocal->trigger();
+		mUpdateRemote->trigger();
+	});
+
+	connect(mAddAndCommit, &QAction::triggered,[this, mUpdateLocal](){
 		QString commit_text = MyQDialogs::InputText("Input commit text", "Update", 800, 200);
 		QString dir = tableWidget->item(tableWidget->currentRow(),ColIndexes::directory)->text();
 		QProcess process;
@@ -168,7 +175,7 @@ void MainWindow::CreateContextMenu()
 			commitRes = Git::DoGitCommand(process, QStringList() << "commit" << "-m" << commit_text);
 			textRes += "\n\ngit commit -m "+commit_text+"\n" + commitRes.ToStr2();
 		}
-		mUpdate->trigger();
+		mUpdateLocal->trigger();
 		if(!(addRes.success && addRes.error.isEmpty() && addRes.errorOutput.isEmpty()
 				&& commitRes.success && commitRes.error.isEmpty() && commitRes.errorOutput.isEmpty()))
 			textRes.prepend("Attention! There were errors while executing commands!\n\n");
@@ -182,8 +189,8 @@ void MainWindow::CreateContextMenu()
 		QString remote = MyQDialogs::CustomDialog("Chose remote repo", "Chose remote repo", remotes);
 		if(remote == "Cancel push") return;
 
-		//GitStatus pushRes = Git::DoGitCommand2(dir, QStringList() << "push" << remote << "master");
-		GitStatus pushRes = Git::DoGitCommand2(dir, QStringList() << "push" << "--recurse-submodules=check"/* << "--progress"*/ << remote << "master");
+		GitStatus pushRes = Git::DoGitCommand2(dir, QStringList() << "push" << remote << "master");
+		//GitStatus pushRes = Git::DoGitCommand2(dir, QStringList() << "push" << "--recurse-submodules=check" << "--progress" << remote << "master");
 		QString textRes = "git push " + remote + " master\n" + pushRes.ToStr2();
 		if(!(pushRes.success && pushRes.error.isEmpty() && pushRes.errorOutput.isEmpty()))
 			textRes.prepend("Attention! There were errors while executing commands!\n\n");
