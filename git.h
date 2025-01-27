@@ -51,7 +51,7 @@ struct GitStatus
 struct Git
 {
 	static GitStatus DoGitCommand(QProcess &process, QStringList words);
-	static GitStatus DoGitCommand(QString dirFrom, QString command);
+	static GitStatus DoGitCommand2(QString dirFrom, QStringList words);
 
 	static void DecodeGitCommandResult(GitStatus &gitCommandResult);
 

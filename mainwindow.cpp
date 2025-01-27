@@ -129,6 +129,7 @@ void MainWindow::CreateContextMenu()
 	QAction *mUpdate = new QAction("Обновить статус", tableWidget);
 	QAction *mUpdateRemote = new QAction("Обновить статус удалённых", tableWidget);
 	QAction *mAddAndCommit = new QAction("add and commit all", tableWidget);
+	QAction *mPush = new QAction("push", tableWidget);
 
 	tableWidget->addAction(mShowInExplorer);
 	tableWidget->addAction(mUpdate);
@@ -138,6 +139,7 @@ void MainWindow::CreateContextMenu()
 	tableWidget->actions().back()->setSeparator(true);
 
 	tableWidget->addAction(mAddAndCommit);
+	tableWidget->addAction(mPush);
 
 	connect(mShowInExplorer, &QAction::triggered,[this](){
 		MyQExecute::OpenDir(tableWidget->item(tableWidget->currentRow(),0)->text());
@@ -173,35 +175,20 @@ void MainWindow::CreateContextMenu()
 		MyQDialogs::ShowText(textRes);
 	});
 
+	connect(mPush, &QAction::triggered,[this](){
+		QString dir = tableWidget->item(tableWidget->currentRow(),ColIndexes::directory)->text();
+		auto remotes = tableWidget->item(tableWidget->currentRow(),ColIndexes::remoteRepos)->text().split(" ", QString::SkipEmptyParts);
+		remotes += "Cancel push";
+		QString remote = MyQDialogs::CustomDialog("Chose remote repo", "Chose remote repo", remotes);
+		if(remote == "Cancel push") return;
 
-	// add, commit, push origin master
-//	QAction *mAddCommitPush = new QAction("add, commit, push origin master", tableWidget);
-//	tableWidget->addAction(mAddCommitPush);
-//	tableWidget->setContextMenuPolicy(Qt::ActionsContextMenu);
-//	connect(mAddCommitPush, &QAction::triggered,[](){
-//		QString commit = MyQDialogs::InputText("Введите сообщение коммита:",300,200);
-//		if(commit.isEmpty()) { QMbc(this,"Коммит отклонён", "Коммит отклонён, пустое сообщение не допускается"); return; }
-
-//		QProcess process;
-//		process.setWorkingDirectory(tableWidget->item(tableWidget->currentRow(),ColIndexes::directory)->text());
-//		auto res = DoGitCommand(process, QStringList() << "add" << ".");
-//		if(!res.success) { QMbc(this,"Коммит не выполнен", "При выполнении add QProcess ошибки:\n" + res.error); return; }
-//		if(!res.error.isEmpty()) { QMbc(this,"Коммит не выполнен", "При выполнении add ошибки:\n" + res.error); return; }
-//		if(!res.output.isEmpty()) { QMbc(this,"Коммит не выполнен", "При выполнении add неожиданный вывод:\n" + res.output); return; }
-
-//		res = DoGitCommand(process, QStringList() << "commit" << "-m" << commit);
-//		if(!res.success) { QMbc(this,"Коммит не выполнен", "При выполнении commit QProcess ошибки:\n" + res.error); return; }
-//		if(!res.error.isEmpty()) { QMbc(this,"Коммит не выполнен", "При выполнении commit ошибки:\n" + res.error); return; }
-//		if(res.output.isEmpty()) { QMbc(this,"Коммит не выполнен", "При выполнении commit пустой вывод"); return; }
-//		QMbi(this,"Коммит выполнен", "Вывод при выполнении:\n" + res.output);
-
-//		res = DoGitCommand(process, QStringList() << "push" << "origin" << "master");
-//		QMbi(this,"Push", res.output + "\n\n\n" + res.error);
-//		if(!res.success) { QMbc(this,"Коммит не выполнен", "При выполнении push QProcess ошибки:\n" + res.error); return; }
-//		if(!res.error.isEmpty()) { QMbc(this,"Push не выполнен", "При выполнении push ошибки:\n" + res.error); return; }
-//		if(res.output.isEmpty()) { QMbc(this,"Push не выполнен", "При выполнении push пустой вывод"); return; }
-//		QMbi(this,"Push выполнен", "Push при выполнении:\n" + res.output);
-//	});
+		//GitStatus pushRes = Git::DoGitCommand2(dir, QStringList() << "push" << remote << "master");
+		GitStatus pushRes = Git::DoGitCommand2(dir, QStringList() << "push" << "--recurse-submodules=check" << "--progress" << remote << "master");
+		QString textRes = "git push " + remote + " master\n" + pushRes.ToStr2();
+		if(!(pushRes.success && pushRes.error.isEmpty() && pushRes.errorOutput.isEmpty()))
+			textRes.prepend("Attention! There were errors while executing commands!\n\n");
+		MyQDialogs::ShowText(textRes);
+	});
 }
 
 void MainWindow::LoadSettings()

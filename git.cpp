@@ -46,11 +46,11 @@ GitStatus Git::DoGitCommand(QProcess & process, QStringList words)
 	return { process.workingDirectory(), true, "", process.readAllStandardOutput(), process.readAllStandardError(), "", "", {}};
 }
 
-GitStatus Git::DoGitCommand(QString dirFrom, QString command)
+GitStatus Git::DoGitCommand2(QString dirFrom, QStringList words)
 {
 	QProcess process;
 	process.setWorkingDirectory(dirFrom);
-	return DoGitCommand(process, command.split(" ", QString::SkipEmptyParts));
+	return DoGitCommand(process, words);
 }
 
 void Git::DecodeGitCommandResult(GitStatus & gitCommandResult)
@@ -95,7 +95,7 @@ void Git::DecodeGitCommandResult(GitStatus & gitCommandResult)
 			gitCommandResult.pushStatus = "not pushed";
 		else
 		{
-			auto res = DoGitCommand(gitCommandResult.dir, "remote");
+			auto res = DoGitCommand2(gitCommandResult.dir, {"remote"});
 			if(!res.success) { gitCommandResult.pushStatus = "error doing command remote: " + res.error; return; }
 			if(!res.errorOutput.isEmpty())  { gitCommandResult.pushStatus = "command remote error output " + res.errorOutput; return; }
 			if(res.standartOutput.isEmpty()) gitCommandResult.pushStatus = "no remote repository";
