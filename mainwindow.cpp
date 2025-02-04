@@ -126,13 +126,18 @@ void MainWindow::CreateContextMenu()
 	tableWidget->setContextMenuPolicy(Qt::ActionsContextMenu);
 
 	QAction *mShowInExplorer = new QAction("Показать в проводнике", tableWidget);
-	QAction *mUpdateLocal = new QAction("Обновить локальный статус", tableWidget);
+	QAction *mUpdateLocal = new QAction("Обновить статус локальный", tableWidget);
 	QAction *mUpdateRemote = new QAction("Обновить статус удалённых", tableWidget);
 	QAction *mUpdateLocalAndRemote = new QAction("Обновить статус локальный и удалённых", tableWidget);
-	QAction *mAddAndCommit = new QAction("add and commit all", tableWidget);
-	QAction *mPush = new QAction("push", tableWidget);
+	QAction *mOpenRepo = new QAction("GitExt Open repository", tableWidget);
+	QAction *mCommit = new QAction("GitExt Commit", tableWidget);
+	QAction *mPush = new QAction("GitExt Push", tableWidget);
 
 	tableWidget->addAction(mShowInExplorer);
+
+	tableWidget->addAction(new QAction);
+	tableWidget->actions().back()->setSeparator(true);
+
 	tableWidget->addAction(mUpdateLocal);
 	tableWidget->addAction(mUpdateRemote);
 	tableWidget->addAction(mUpdateLocalAndRemote);
@@ -140,7 +145,8 @@ void MainWindow::CreateContextMenu()
 	tableWidget->addAction(new QAction);
 	tableWidget->actions().back()->setSeparator(true);
 
-	tableWidget->addAction(mAddAndCommit);
+	tableWidget->addAction(mOpenRepo);
+	tableWidget->addAction(mCommit);
 	tableWidget->addAction(mPush);
 
 	connect(mShowInExplorer, &QAction::triggered,[this](){
@@ -162,39 +168,53 @@ void MainWindow::CreateContextMenu()
 		mUpdateRemote->trigger();
 	});
 
-	connect(mAddAndCommit, &QAction::triggered,[this, mUpdateLocal](){
-		QString commit_text = MyQDialogs::InputText("Input commit text", "Update", 800, 200);
+	connect(mOpenRepo, &QAction::triggered,[this](){
 		QString dir = tableWidget->item(tableWidget->currentRow(),ColIndexes::directory)->text();
-		QProcess process;
-		process.setWorkingDirectory(dir);
-		GitStatus addRes = Git::DoGitCommand(process, QStringList() << "add" << ".");
-		GitStatus commitRes;
-		QString textRes = "git add .\n" + addRes.ToStr2();
-		if(addRes.success && addRes.error.isEmpty() && addRes.errorOutput.isEmpty())
-		{
-			commitRes = Git::DoGitCommand(process, QStringList() << "commit" << "-m" << commit_text);
-			textRes += "\n\ngit commit -m "+commit_text+"\n" + commitRes.ToStr2();
-		}
-		mUpdateLocal->trigger();
-		if(!(addRes.success && addRes.error.isEmpty() && addRes.errorOutput.isEmpty()
-				&& commitRes.success && commitRes.error.isEmpty() && commitRes.errorOutput.isEmpty()))
-			textRes.prepend("Attention! There were errors while executing commands!\n\n");
-		MyQDialogs::ShowText(textRes);
+		MyQExecute::Execute("C:\\Program Files (x86)\\GitExtensions\\GitExtensions.exe",
+							{dir});
+		});
+
+	connect(mCommit, &QAction::triggered,[this](){
+		QString dir = tableWidget->item(tableWidget->currentRow(),ColIndexes::directory)->text();
+		MyQExecute::Execute("C:\\Program Files (x86)\\GitExtensions\\GitExtensions.exe",
+							{"commit", dir});
+
+//		QString commit_text = MyQDialogs::InputText("Input commit text", "Update", 800, 200);
+
+//		QProcess process;
+//		process.setWorkingDirectory(dir);
+//		GitStatus addRes = Git::DoGitCommand(process, QStringList() << "add" << ".");
+//		GitStatus commitRes;
+//		QString textRes = "git add .\n" + addRes.ToStr2();
+//		if(addRes.success && addRes.error.isEmpty() && addRes.errorOutput.isEmpty())
+//		{
+//			commitRes = Git::DoGitCommand(process, QStringList() << "commit" << "-m" << commit_text);
+//			textRes += "\n\ngit commit -m "+commit_text+"\n" + commitRes.ToStr2();
+//		}
+//		mUpdateLocal->trigger();
+//		if(!(addRes.success && addRes.error.isEmpty() && addRes.errorOutput.isEmpty()
+//				&& commitRes.success && commitRes.error.isEmpty() && commitRes.errorOutput.isEmpty()))
+//			textRes.prepend("Attention! There were errors while executing commands!\n\n");
+//		MyQDialogs::ShowText(textRes);
 	});
 
 	connect(mPush, &QAction::triggered,[this](){
 		QString dir = tableWidget->item(tableWidget->currentRow(),ColIndexes::directory)->text();
-		auto remotes = tableWidget->item(tableWidget->currentRow(),ColIndexes::remoteRepos)->text().split(" ", QString::SkipEmptyParts);
-		remotes += "Cancel push";
-		QString remote = MyQDialogs::CustomDialog("Chose remote repo", "Chose remote repo", remotes);
-		if(remote == "Cancel push") return;
+		MyQExecute::Execute("C:\\Program Files (x86)\\GitExtensions\\GitExtensions.exe",
+							{"push", dir});
 
-		GitStatus pushRes = Git::DoGitCommand2(dir, QStringList() << "push" << remote << "master");
-		//GitStatus pushRes = Git::DoGitCommand2(dir, QStringList() << "push" << "--recurse-submodules=check" << "--progress" << remote << "master");
-		QString textRes = "git push " + remote + " master\n" + pushRes.ToStr2();
-		if(!(pushRes.success && pushRes.error.isEmpty() && pushRes.errorOutput.isEmpty()))
-			textRes.prepend("Attention! There were errors while executing commands!\n\n");
-		MyQDialogs::ShowText(textRes);
+//		QString dir = tableWidget->item(tableWidget->currentRow(),ColIndexes::directory)->text();
+//		auto remotes = tableWidget->item(tableWidget->currentRow(),ColIndexes::remoteRepos)->text().split(" ", QString::SkipEmptyParts);
+//		remotes += "Cancel push";
+//		QString remote = MyQDialogs::CustomDialog("Chose remote repo", "Chose remote repo", remotes);
+//		if(remote == "Cancel push") return;
+
+//		GitStatus pushRes = Git::DoGitCommand2(dir, QStringList() << "push" << remote << "master");
+//		//GitStatus pushRes = Git::DoGitCommand2(dir, QStringList() << "push" << "--recurse-submodules=check" << "--progress" << remote << "master");
+//		QString textRes = "git push " + remote + " master\n" + pushRes.ToStr2();
+//		if(!(pushRes.success && pushRes.error.isEmpty() && pushRes.errorOutput.isEmpty()))
+//			textRes.prepend("Attention! There were errors while executing commands!\n\n");
+//		MyQDialogs::ShowText(textRes);
 	});
 }
 
