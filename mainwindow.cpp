@@ -6,6 +6,7 @@
 #include <QVBoxLayout>
 #include <QSplitter>
 #include <QSettings>
+#include <QFileDialog>
 #include <QPushButton>
 #include <QLabel>
 #include <QHeaderView>
@@ -41,6 +42,17 @@ void ReplaceInTextEdit(QTextEdit *textEdit)
 namespace forCommitsParser {
 	MainWindow *mainWindowPtr;
 }
+QString MainWindow::ReadAndGetGitExtensionsExe(QString dir, bool showInfoMessageBox)
+{
+	if(GitExtensionsExe.isEmpty() || !QFileInfo(GitExtensionsExe).isFile())
+	{
+		if(showInfoMessageBox) QMbInfo("Укажите программу для работы с репозиториями");
+		GitExtensionsExe = QFileDialog::getOpenFileName(nullptr, "Укажите программу для работы с репозиториями",
+														dir, "*.exe");
+	}
+	return GitExtensionsExe;
+}
+
 MainWindow::MainWindow(QWidget *parent)
 	: QWidget(parent)
 {
@@ -129,6 +141,8 @@ void MainWindow::CreateContextMenu()
 	QAction *mUpdateLocal = new QAction("Обновить статус локальный", tableWidget);
 	QAction *mUpdateRemote = new QAction("Обновить статус удалённых", tableWidget);
 	QAction *mUpdateLocalAndRemote = new QAction("Обновить статус локальный и удалённых", tableWidget);
+
+	QAction *mSetGitExtensions = new QAction("Указать программу для работы с репозиториями", tableWidget);
 	QAction *mOpenRepo = new QAction("GitExt Open repository", tableWidget);
 	QAction *mCommit = new QAction("GitExt Commit", tableWidget);
 	QAction *mPush = new QAction("GitExt Push", tableWidget);
@@ -141,6 +155,11 @@ void MainWindow::CreateContextMenu()
 	tableWidget->addAction(mUpdateLocal);
 	tableWidget->addAction(mUpdateRemote);
 	tableWidget->addAction(mUpdateLocalAndRemote);
+
+	tableWidget->addAction(new QAction);
+	tableWidget->actions().back()->setSeparator(true);
+
+	tableWidget->addAction(mSetGitExtensions);
 
 	tableWidget->addAction(new QAction);
 	tableWidget->actions().back()->setSeparator(true);
@@ -168,16 +187,24 @@ void MainWindow::CreateContextMenu()
 		mUpdateRemote->trigger();
 	});
 
+	connect(mSetGitExtensions, &QAction::triggered,[this](){
+		QString prevGitExtesions;
+		prevGitExtesions = GitExtensionsExe;
+		GitExtensionsExe.clear();
+
+		ReadAndGetGitExtensionsExe(prevGitExtesions, false);
+
+		if(GitExtensionsExe.isEmpty()) GitExtensionsExe = prevGitExtesions;
+	});
+
 	connect(mOpenRepo, &QAction::triggered,[this](){
 		QString dir = tableWidget->item(tableWidget->currentRow(),ColIndexes::directory)->text();
-		MyQExecute::Execute("C:\\Program Files (x86)\\GitExtensions\\GitExtensions.exe",
-							{dir});
+		MyQExecute::Execute(ReadAndGetGitExtensionsExe(GitExtensionsExe, true), {dir});
 		});
 
 	connect(mCommit, &QAction::triggered,[this](){
 		QString dir = tableWidget->item(tableWidget->currentRow(),ColIndexes::directory)->text();
-		MyQExecute::Execute("C:\\Program Files (x86)\\GitExtensions\\GitExtensions.exe",
-							{"commit", dir});
+		MyQExecute::Execute(ReadAndGetGitExtensionsExe(GitExtensionsExe, true), {"commit", dir});
 
 //		QString commit_text = MyQDialogs::InputText("Input commit text", "Update", 800, 200);
 
@@ -200,8 +227,7 @@ void MainWindow::CreateContextMenu()
 
 	connect(mPush, &QAction::triggered,[this](){
 		QString dir = tableWidget->item(tableWidget->currentRow(),ColIndexes::directory)->text();
-		MyQExecute::Execute("C:\\Program Files (x86)\\GitExtensions\\GitExtensions.exe",
-							{"push", dir});
+		MyQExecute::Execute(ReadAndGetGitExtensionsExe(GitExtensionsExe, true), {"push", dir});
 
 //		QString dir = tableWidget->item(tableWidget->currentRow(),ColIndexes::directory)->text();
 //		auto remotes = tableWidget->item(tableWidget->currentRow(),ColIndexes::remoteRepos)->text().split(" ", QString::SkipEmptyParts);
@@ -218,21 +244,7 @@ void MainWindow::CreateContextMenu()
 	});
 }
 
-void MainWindow::LoadSettings()
-{
-	QSettings settings(MyQDifferent::PathToExe() + "/files/settings.ini", QSettings::IniFormat);
-	this->restoreGeometry(settings.value("geo").toByteArray());
-	splitterCenter->restoreState(settings.value("splitterCenter").toByteArray());
-	textEdit->setPlainText(settings.value("textEdit").toString());
-	settings.beginGroup("table");
-	for(int i=0; i<tableWidget->columnCount(); i++)
-	{
-		if(settings.contains("col"+QSn(i)))
-		{
-			tableWidget->setColumnWidth(i,settings.value("col"+QSn(i)).toInt());
-		}
-	}
-}
+
 
 void MainWindow::SetRow(int row, const GitStatus & gitStatusResult)
 {
@@ -385,9 +397,27 @@ void MainWindow::closeEvent(QCloseEvent * event)
 	settings.setValue("geo",saveGeometry());
 	settings.setValue("splitterCenter",splitterCenter->saveState());
 	settings.setValue("textEdit",textEdit->toPlainText());
+	settings.setValue("GitExtensionsExe", GitExtensionsExe);
 	settings.beginGroup("table");
 	for(int i=0; i<tableWidget->columnCount(); i++)
 		settings.setValue("col"+QSn(i),tableWidget->columnWidth(i));
 
 	event->accept();
+}
+
+void MainWindow::LoadSettings()
+{
+	QSettings settings(MyQDifferent::PathToExe() + "/files/settings.ini", QSettings::IniFormat);
+	this->restoreGeometry(settings.value("geo").toByteArray());
+	splitterCenter->restoreState(settings.value("splitterCenter").toByteArray());
+	textEdit->setPlainText(settings.value("textEdit").toString());
+	GitExtensionsExe = settings.value("GitExtensionsExe").toString();
+	settings.beginGroup("table");
+	for(int i=0; i<tableWidget->columnCount(); i++)
+	{
+		if(settings.contains("col"+QSn(i)))
+		{
+			tableWidget->setColumnWidth(i,settings.value("col"+QSn(i)).toInt());
+		}
+	}
 }

@@ -16,6 +16,8 @@ class MainWindow : public QWidget
 	QSplitter *splitterCenter;
 	QTextEdit *textEdit;
 	QTableWidget *tableWidget;
+	QString GitExtensionsExe;
+	QString ReadAndGetGitExtensionsExe(QString dir, bool showInfoMessageBox);
 public:
 	MainWindow(QWidget *parent = nullptr);
 	void CreateContextMenu();
