@@ -8,6 +8,7 @@ SOURCES += \
     mainwindow.cpp
 
 HEADERS += \
+    ../include/MyQTimer.h \
     git.h \
     mainwindow.h
 

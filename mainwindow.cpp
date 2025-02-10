@@ -11,12 +11,14 @@
 #include <QLabel>
 #include <QHeaderView>
 #include <QAction>
+#include <QVariant>
 
 #include "MyQShortings.h"
 #include "MyQDifferent.h"
 #include "MyQFileDir.h"
 #include "MyQDialogs.h"
 #include "MyQExecute.h"
+#include "MyQTimer.h"
 
 #include "git.h"
 
@@ -79,6 +81,9 @@ MainWindow::MainWindow(QWidget *parent)
 	auto btn = new QPushButton("Сканировать", this);
 	loLeft->addWidget(btn);
 	connect(btn,&QPushButton::clicked,this,&MainWindow::SlotScan);
+	btn = new QPushButton("Обновить все", this);
+	loLeft->addWidget(btn);
+	connect(btn,&QPushButton::clicked,this,&MainWindow::CheckRemotes);
 
 	// right part
 	// header buttons
@@ -172,15 +177,9 @@ void MainWindow::CreateContextMenu()
 		MyQExecute::OpenDir(tableWidget->item(tableWidget->currentRow(),0)->text());
 	});
 
-	connect(mUpdateLocal, &QAction::triggered,[this](){
-		QString dir = tableWidget->item(tableWidget->currentRow(),ColIndexes::directory)->text();
-		QProcess process;
-		process.setWorkingDirectory(dir);
-		auto gitStatus = Git::GetGitStatusForOneDir(process, dir);
-		SetRow(tableWidget->currentRow(),gitStatus);
-	});
+	connect(mUpdateLocal, &QAction::triggered, [this](){ UpdateLocal(tableWidget->currentRow()); });
 
-	connect(mUpdateRemote, &QAction::triggered, this, &MainWindow::SlotUpdateRemote);
+	connect(mUpdateRemote, &QAction::triggered, [this](){ UpdateRemote(tableWidget->currentRow()); });
 
 	connect(mUpdateLocalAndRemote, &QAction::triggered, [mUpdateLocal, mUpdateRemote](){
 		mUpdateLocal->trigger();
@@ -270,12 +269,21 @@ void MainWindow::SetRow(int row, const GitStatus & gitStatusResult)
 	}
 }
 
-void MainWindow::SlotUpdateRemote()
+void MainWindow::UpdateLocal(int row)
 {
-	tableWidget->item(tableWidget->currentRow(),ColIndexes::remoteRepos)->setBackground(QColor(255,255,255));
+	QString dir = tableWidget->item(row,ColIndexes::directory)->text();
+	QProcess process;
+	process.setWorkingDirectory(dir);
+	auto gitStatus = Git::GetGitStatusForOneDir(process, dir);
+	SetRow(row,gitStatus);
+}
 
-	QString dir = tableWidget->item(tableWidget->currentRow(),ColIndexes::directory)->text();
-	QStringList remotes = tableWidget->item(tableWidget->currentRow(),ColIndexes::remoteRepos)->text().split(' ',QString::SkipEmptyParts);
+void MainWindow::UpdateRemote(int row)
+{
+	tableWidget->item(row,ColIndexes::remoteRepos)->setBackground(QColor(255,255,255));
+
+	QString dir = tableWidget->item(row,ColIndexes::directory)->text();
+	QStringList remotes = tableWidget->item(row,ColIndexes::remoteRepos)->text().split(' ',QString::SkipEmptyParts);
 	std::vector<int> updated;
 	const int undefined = 1;
 	const int fetchEmpty = 1;
@@ -307,10 +315,9 @@ void MainWindow::SlotUpdateRemote()
 				if(!fetchRes.errorOutput.isEmpty()) result += "fetch errorOutput:\n" + fetchRes.errorOutput + "\n";
 				auto res = MyQDialogs::CustomDialog("Ошибка при выполнении fetch",
 													"Ошибка при выполнении fetch:\n" + fetchRes.error + "\n" + fetchRes.errorOutput,
-													{"Повторить", "Пропустить", "Пропустить всё"});
+													{"Повторить", "Прервать"});
 				if(res == "Повторить") {}
-				else if(res == "Пропустить") { stop = true; }
-				else if(res == "Пропустить всё") { stop = true; stopAll = true; }
+				else if(res == "Прервать") { stop = true; stopAll = true; }
 				else QMbc(0,"","wrong answ [" + res + "]");
 			}
 			if(stop) break;
@@ -334,10 +341,9 @@ void MainWindow::SlotUpdateRemote()
 				if(!difRes.errorOutput.isEmpty()) result += "diff errorOutput:\n" + difRes.errorOutput + "\n";
 				auto res = MyQDialogs::CustomDialog("Ошибка при выполнении diff",
 													"Ошибка при выполнении diff:\n" + difRes.error + "\n" + difRes.errorOutput,
-													{"Повторить", "Пропустить", "Пропустить всё"});
+													{"Повторить", "Прервать"});
 				if(res == "Повторить") {}
-				else if(res == "Пропустить") { stop = true; }
-				else if(res == "Пропустить всё") { stop = true; stopAll = true; }
+				else if(res == "Прервать") { stop = true; stopAll = true; }
 				else QMbc(0,"","wrong answ [" + res + "]");
 			}
 			if(stop) { stop = false; break; }
@@ -345,12 +351,12 @@ void MainWindow::SlotUpdateRemote()
 		if(stopAll) break;
 	}
 
-	tableWidget->item(tableWidget->currentRow(),ColIndexes::remoteOutput)->setText(result);
+	tableWidget->item(row,ColIndexes::remoteOutput)->setText(result);
 
 	QColor color(146,208,80);
 	for(auto &update:updated) if(update != fetchAndDiffEmpty) { color = {208,146,80}; break; }
-	tableWidget->item(tableWidget->currentRow(),ColIndexes::remoteRepos)->setBackground(color);
-	tableWidget->setCurrentCell(tableWidget->currentRow(),0);
+	tableWidget->item(row,ColIndexes::remoteRepos)->setBackground(color);
+	tableWidget->setCurrentCell(row,0);
 }
 
 void MainWindow::SlotScan()
@@ -387,6 +393,51 @@ void MainWindow::SlotScan()
 	{
 		SetRow(i, result[i]);
 	}
+}
+
+void MainWindow::CheckRemotes()
+{
+	QLabel *labelProgerss = new QLabel("Старт");
+	labelProgerss->setAlignment(Qt::AlignCenter);
+	auto f = labelProgerss->font(); f.setPointSize(14); labelProgerss->setFont(f);
+	labelProgerss->resize(320,100);
+	labelProgerss->show();
+	this->setEnabled(false);
+
+	MyQTimer *timerChecker = new MyQTimer(this);
+	timerChecker->intValues["rowIndex"] = 0;
+	int *rowIndexPt = &timerChecker->intValues["rowIndex"];
+	connect(timerChecker, &QTimer::timeout, [this, timerChecker, rowIndexPt, labelProgerss](){
+		int &rowIndex = *rowIndexPt;
+
+		labelProgerss->setText("Обновляем статус " + QSn(rowIndex) + " из " + QSn(tableWidget->rowCount()));
+
+
+		while(tableWidget->item(rowIndex,ColIndexes::commitStatus)->text() == GitStatus::notGit)
+		{
+			rowIndex++;
+			if(rowIndex >= tableWidget->rowCount())
+			{
+				timerChecker->Finish(true);
+				labelProgerss->deleteLater();
+				this->setEnabled(true);
+				return;
+			}
+		}
+
+		UpdateLocal(rowIndex);
+		UpdateRemote(rowIndex);
+
+		rowIndex++;
+		if(rowIndex >= tableWidget->rowCount())
+		{
+			timerChecker->Finish(true);
+			labelProgerss->deleteLater();
+			this->setEnabled(true);
+			return;
+		}
+	});
+	timerChecker->start(25);
 }
 
 void MainWindow::closeEvent(QCloseEvent * event)

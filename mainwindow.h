@@ -27,11 +27,13 @@ public:
 
 	void SetRow(int row, const GitStatus &gitStatusResult);
 
-	void SlotUpdateRemote();
+	void UpdateLocal(int row);
+	void UpdateRemote(int row);
 
 private: signals:
 
 private slots:
 	void SlotScan();
+	void CheckRemotes();
 };
 #endif // MAINWINDOW_H
