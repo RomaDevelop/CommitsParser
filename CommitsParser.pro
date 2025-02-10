@@ -13,6 +13,7 @@ HEADERS += \
     mainwindow.h
 
 INCLUDEPATH += ../include
+DEPENDPATH += ../include
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin
