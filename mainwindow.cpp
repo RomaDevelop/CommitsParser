@@ -13,6 +13,7 @@
 #include <QAction>
 #include <QVariant>
 
+#include "MyCppDifferent.h"
 #include "MyQShortings.h"
 #include "MyQDifferent.h"
 #include "MyQFileDir.h"
@@ -78,12 +79,19 @@ MainWindow::MainWindow(QWidget *parent)
 	textEdit = new QTextEdit(this);
 	loLeft->addWidget(textEdit);
 	textEdit->setFont(basicFont);
-	auto btn = new QPushButton("Сканировать", this);
+	auto btn = new QPushButton("Сканировать локально", this);
 	loLeft->addWidget(btn);
 	connect(btn,&QPushButton::clicked,this,&MainWindow::SlotScan);
-	btn = new QPushButton("Обновить все", this);
+	btn = new QPushButton("Обновить удаленные", this);
 	loLeft->addWidget(btn);
-	connect(btn,&QPushButton::clicked,this,&MainWindow::CheckRemotes);
+	connect(btn,&QPushButton::clicked,this,&MainWindow::SlotCheckRemotes);
+	btn = new QPushButton(" Сканировать и обновить ", this);
+	loLeft->addWidget(btn);
+	connect(btn,&QPushButton::clicked,[this](){
+		SlotScan();
+		SlotHideNotGit();
+		SlotCheckRemotes();
+	});
 
 	// right part
 	// header buttons
@@ -97,19 +105,10 @@ MainWindow::MainWindow(QWidget *parent)
 	});
 	btn = new QPushButton("Скрыть "+GitStatus::notGit, this);
 	loRihgtHeader->addWidget(btn);
-	connect(btn,&QPushButton::clicked,[this](){
-		for(int i=0; i<tableWidget->rowCount(); i++)
-			if(tableWidget->item(i,ColIndexes::commitStatus)->text().contains(GitStatus::notGit))
-				tableWidget->hideRow(i);
-	});
+	connect(btn,&QPushButton::clicked, this, &MainWindow::SlotHideNotGit);
 	btn = new QPushButton("Скрыть " + Statuses::commited + " " + Statuses::pushed, this);
 	loRihgtHeader->addWidget(btn);
-	connect(btn,&QPushButton::clicked,[this](){
-		for(int i=0; i<tableWidget->rowCount(); i++)
-			if(tableWidget->item(i,ColIndexes::commitStatus)->text() == Statuses::commited
-					&& tableWidget->item(i,ColIndexes::pushStatus)->text() == Statuses::pushed)
-				tableWidget->hideRow(i);
-	});
+	connect(btn,&QPushButton::clicked, this, &MainWindow::SlotHideCommitedPushed);
 
 	// table
 	tableWidget = new QTableWidget(this);
@@ -147,10 +146,10 @@ void MainWindow::CreateContextMenu()
 	QAction *mUpdateRemote = new QAction("Обновить статус удалённых", tableWidget);
 	QAction *mUpdateLocalAndRemote = new QAction("Обновить статус локальный и удалённых", tableWidget);
 
-	QAction *mSetGitExtensions = new QAction("Указать программу для работы с репозиториями", tableWidget);
 	QAction *mOpenRepo = new QAction("GitExt Open repository", tableWidget);
 	QAction *mCommit = new QAction("GitExt Commit", tableWidget);
 	QAction *mPush = new QAction("GitExt Push", tableWidget);
+	QAction *mSetGitExtensions = new QAction("Указать программу для работы с репозиториями", tableWidget);
 
 	tableWidget->addAction(mShowInExplorer);
 
@@ -164,14 +163,14 @@ void MainWindow::CreateContextMenu()
 	tableWidget->addAction(new QAction);
 	tableWidget->actions().back()->setSeparator(true);
 
-	tableWidget->addAction(mSetGitExtensions);
+	tableWidget->addAction(mOpenRepo);
+	tableWidget->addAction(mCommit);
+	tableWidget->addAction(mPush);
 
 	tableWidget->addAction(new QAction);
 	tableWidget->actions().back()->setSeparator(true);
 
-	tableWidget->addAction(mOpenRepo);
-	tableWidget->addAction(mCommit);
-	tableWidget->addAction(mPush);
+	tableWidget->addAction(mSetGitExtensions);
 
 	connect(mShowInExplorer, &QAction::triggered,[this](){
 		MyQExecute::OpenDir(tableWidget->item(tableWidget->currentRow(),0)->text());
@@ -278,7 +277,7 @@ void MainWindow::UpdateLocal(int row)
 	SetRow(row,gitStatus);
 }
 
-void MainWindow::UpdateRemote(int row)
+MainWindow::UpdateRemoteRes MainWindow::UpdateRemote(int row)
 {
 	tableWidget->item(row,ColIndexes::remoteRepos)->setBackground(QColor(255,255,255));
 
@@ -292,29 +291,41 @@ void MainWindow::UpdateRemote(int row)
 	process.setWorkingDirectory(dir);
 
 	QString result;
+	int countTries = 3;
+	bool stopAll = false;
 	for(auto &remote:remotes)
 	{
 		int &curUpdated = updated.emplace_back(undefined);
 		result += "\n\nstart work with " + remote + "\n";
 		bool stop = false;
-		bool stopAll = false;
 		bool did = false;
 		while(!stop && !did)
 		{
 			result += "git fetch " + remote + "\n";
-			auto fetchRes = Git::DoGitCommand(process, QStringList() << "fetch" << remote);
-			if(fetchRes.success && fetchRes.errorOutput.isEmpty())
+			QString errors;
+			for(int i=0; i<countTries; i++)
 			{
-				result += fetchRes.standartOutput;
-				if(fetchRes.standartOutput.isEmpty()) { result += "fetch empty result\n"; curUpdated = fetchEmpty; }
-				did = true;
+				auto fetchRes = Git::DoGitCommand(process, QStringList() << "fetch" << remote);
+				if(fetchRes.success && fetchRes.errorOutput.isEmpty())
+				{
+					result += "fetch success\n";
+					result += fetchRes.standartOutput;
+					if(fetchRes.standartOutput.isEmpty()) { result += "fetch empty result\n"; curUpdated = fetchEmpty; }
+					did = true;
+					break;
+				}
+				else
+				{
+					if(!fetchRes.error.isEmpty()) errors += "fetch error:\n" + fetchRes.error + "\n";
+					if(!fetchRes.errorOutput.isEmpty()) errors += "fetch errorOutput:\n" + fetchRes.errorOutput + "\n";
+					MyCppDifferent::sleep_ms(10);
+				}
 			}
-			else
+
+			if(!did)
 			{
-				if(!fetchRes.error.isEmpty()) result += "fetch error:\n" + fetchRes.error + "\n";
-				if(!fetchRes.errorOutput.isEmpty()) result += "fetch errorOutput:\n" + fetchRes.errorOutput + "\n";
-				auto res = MyQDialogs::CustomDialog("Ошибка при выполнении fetch",
-													"Ошибка при выполнении fetch:\n" + fetchRes.error + "\n" + fetchRes.errorOutput,
+				auto res = MyQDialogs::CustomDialog("Git fetch не выполнено",
+													"Git fetch не выполнено (3 попытки); ошибки:\n" + errors,
 													{"Повторить", "Прервать"});
 				if(res == "Повторить") {}
 				else if(res == "Прервать") { stop = true; stopAll = true; }
@@ -328,19 +339,29 @@ void MainWindow::UpdateRemote(int row)
 		while(!stop && !did)
 		{
 			result += "git diff --name-status master "+remote+"/master\n";
-			auto difRes = Git::DoGitCommand(process, QStringList() << "diff" << "--name-status" << "master" <<  remote+"/master");
-			if(difRes.success && difRes.errorOutput.isEmpty())
+			QString errors;
+			for(int i=0; i<countTries; i++)
 			{
-				result += difRes.standartOutput;
-				if(difRes.standartOutput.isEmpty()) { result += "diff empty result\n"; if(curUpdated == fetchEmpty) curUpdated = fetchAndDiffEmpty; }
-				did = true;
+				auto difRes = Git::DoGitCommand(process, QStringList() << "diff" << "--name-status" << "master" <<  remote+"/master");
+				if(difRes.success && difRes.errorOutput.isEmpty())
+				{
+					result += difRes.standartOutput;
+					if(difRes.standartOutput.isEmpty()) { result += "diff empty result\n"; if(curUpdated == fetchEmpty) curUpdated = fetchAndDiffEmpty; }
+					did = true;
+					break;
+				}
+				else
+				{
+					if(!difRes.error.isEmpty()) errors += "diff error:\n" + difRes.error + "\n";
+					if(!difRes.errorOutput.isEmpty()) errors += "diff errorOutput:\n" + difRes.errorOutput + "\n";
+					MyCppDifferent::sleep_ms(10);
+				}
 			}
-			else
+
+			if(!did)
 			{
-				if(!difRes.error.isEmpty()) result += "diff error:\n" + difRes.error + "\n";
-				if(!difRes.errorOutput.isEmpty()) result += "diff errorOutput:\n" + difRes.errorOutput + "\n";
-				auto res = MyQDialogs::CustomDialog("Ошибка при выполнении diff",
-													"Ошибка при выполнении diff:\n" + difRes.error + "\n" + difRes.errorOutput,
+				auto res = MyQDialogs::CustomDialog("Git diff не выполнено",
+													"Git diff не выполнено (3 попытки); ошибки:\n" + errors,
 													{"Повторить", "Прервать"});
 				if(res == "Повторить") {}
 				else if(res == "Прервать") { stop = true; stopAll = true; }
@@ -357,6 +378,9 @@ void MainWindow::UpdateRemote(int row)
 	for(auto &update:updated) if(update != fetchAndDiffEmpty) { color = {208,146,80}; break; }
 	tableWidget->item(row,ColIndexes::remoteRepos)->setBackground(color);
 	tableWidget->setCurrentCell(row,0);
+
+	if(stopAll) return stopAllChecks;
+	else return ok;
 }
 
 void MainWindow::SlotScan()
@@ -395,14 +419,17 @@ void MainWindow::SlotScan()
 	}
 }
 
-void MainWindow::CheckRemotes()
+void MainWindow::SlotCheckRemotes()
 {
+	//if(tableWidget->rowCount() == 0) return;
+	this->setEnabled(false);
+
 	QLabel *labelProgerss = new QLabel("Старт");
+	labelProgerss->setWindowFlag(Qt::Tool, true);
 	labelProgerss->setAlignment(Qt::AlignCenter);
 	auto f = labelProgerss->font(); f.setPointSize(14); labelProgerss->setFont(f);
 	labelProgerss->resize(320,100);
 	labelProgerss->show();
-	this->setEnabled(false);
 
 	MyQTimer *timerChecker = new MyQTimer(this);
 	timerChecker->intValues["rowIndex"] = 0;
@@ -410,8 +437,8 @@ void MainWindow::CheckRemotes()
 	connect(timerChecker, &QTimer::timeout, [this, timerChecker, rowIndexPt, labelProgerss](){
 		int &rowIndex = *rowIndexPt;
 
+		labelProgerss->activateWindow();
 		labelProgerss->setText("Обновляем статус " + QSn(rowIndex) + " из " + QSn(tableWidget->rowCount()));
-
 
 		while(tableWidget->item(rowIndex,ColIndexes::commitStatus)->text() == GitStatus::notGit)
 		{
@@ -426,10 +453,18 @@ void MainWindow::CheckRemotes()
 		}
 
 		UpdateLocal(rowIndex);
-		UpdateRemote(rowIndex);
+		auto updateRemoteRes = UpdateRemote(rowIndex);
+		if(updateRemoteRes == stopAllChecks)
+		{
+			auto res = MyQDialogs::CustomDialog("Ошибка", "Не удалось обновить удаленный репозиторий",
+												{"Перейти к следующему", "Прервать"});
+			if(res == "Перейти к следующему") { updateRemoteRes = ok; }
+			else if(res == "Прервать") { }
+			else QMbc(0,"","wrong answ [" + res + "]");
+		}
 
 		rowIndex++;
-		if(rowIndex >= tableWidget->rowCount())
+		if(rowIndex >= tableWidget->rowCount() || updateRemoteRes == stopAllChecks)
 		{
 			timerChecker->Finish(true);
 			labelProgerss->deleteLater();
@@ -438,6 +473,21 @@ void MainWindow::CheckRemotes()
 		}
 	});
 	timerChecker->start(25);
+}
+
+void MainWindow::SlotHideNotGit()
+{
+	for(int i=0; i<tableWidget->rowCount(); i++)
+		if(tableWidget->item(i,ColIndexes::commitStatus)->text().contains(GitStatus::notGit))
+			tableWidget->hideRow(i);
+}
+
+void MainWindow::SlotHideCommitedPushed()
+{
+	for(int i=0; i<tableWidget->rowCount(); i++)
+		if(tableWidget->item(i,ColIndexes::commitStatus)->text() == Statuses::commited
+				&& tableWidget->item(i,ColIndexes::pushStatus)->text() == Statuses::pushed)
+			tableWidget->hideRow(i);
 }
 
 void MainWindow::closeEvent(QCloseEvent * event)

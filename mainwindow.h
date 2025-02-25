@@ -28,12 +28,15 @@ public:
 	void SetRow(int row, const GitStatus &gitStatusResult);
 
 	void UpdateLocal(int row);
-	void UpdateRemote(int row);
+	enum UpdateRemoteRes { ok, stopAllChecks };
+	UpdateRemoteRes UpdateRemote(int row);
 
 private: signals:
 
 private slots:
 	void SlotScan();
-	void CheckRemotes();
+	void SlotCheckRemotes();
+	void SlotHideNotGit();
+	void SlotHideCommitedPushed();
 };
 #endif // MAINWINDOW_H
