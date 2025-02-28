@@ -141,7 +141,7 @@ void MainWindow::CreateContextMenu()
 {
 	tableWidget->setContextMenuPolicy(Qt::ActionsContextMenu);
 
-	QAction *mShowInExplorer = new QAction("Показать в проводнике", tableWidget);
+	QAction *mShowInExplorer = new QAction("Открыть каталог", tableWidget);
 	QAction *mUpdateLocal = new QAction("Обновить статус локальный", tableWidget);
 	QAction *mUpdateRemote = new QAction("Обновить статус удалённых", tableWidget);
 	QAction *mUpdateLocalAndRemote = new QAction("Обновить статус локальный и удалённых", tableWidget);
