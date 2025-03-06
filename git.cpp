@@ -89,7 +89,7 @@ void Git::DecodeGitCommandResult(GitStatus & gitCommandResult)
 			gitCommandResult.commitStatus = "error unknown commit output";
 		}
 
-		if(gitCommandResult.standartOutput.contains("Your branch is up to date with 'origin/master'"))
+		if(gitCommandResult.standartOutput.contains("Your branch is up to date with '"))
 			gitCommandResult.pushStatus = Statuses::pushed;
 		else if(gitCommandResult.standartOutput.contains("Your branch is ahead of"))
 			gitCommandResult.pushStatus = "not pushed";
