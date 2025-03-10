@@ -163,9 +163,13 @@ void MainWindow::CreateContextMenu()
 	tableWidget->addAction(new QAction);
 	tableWidget->actions().back()->setSeparator(true);
 
-	tableWidget->addAction(mOpenRepo);
 	tableWidget->addAction(mCommit);
 	tableWidget->addAction(mPush);
+
+	tableWidget->addAction(new QAction);
+	tableWidget->actions().back()->setSeparator(true);
+
+	tableWidget->addAction(mOpenRepo);
 
 	tableWidget->addAction(new QAction);
 	tableWidget->actions().back()->setSeparator(true);
