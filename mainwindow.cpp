@@ -35,6 +35,11 @@ namespace ColIndexes {
 	const int colCount = remoteOutput + 1;
 }
 
+namespace Colors {
+	const QColor green(146,208,80);
+
+}
+
 void ReplaceInTextEdit(QTextEdit *textEdit)
 {
 	auto text = textEdit->toPlainText();
@@ -87,11 +92,7 @@ MainWindow::MainWindow(QWidget *parent)
 	connect(btn,&QPushButton::clicked,this,&MainWindow::SlotCheckRemotes);
 	btn = new QPushButton(" Сканировать и обновить ", this);
 	loLeft->addWidget(btn);
-	connect(btn,&QPushButton::clicked,[this](){
-		SlotScan();
-		SlotHideNotGit();
-		SlotCheckRemotes();
-	});
+	connect(btn,&QPushButton::clicked, this, &MainWindow::SlotScanAndCheckRemotes);
 
 	// right part
 	// header buttons
@@ -106,9 +107,10 @@ MainWindow::MainWindow(QWidget *parent)
 	btn = new QPushButton("Скрыть "+GitStatus::notGit, this);
 	loRihgtHeader->addWidget(btn);
 	connect(btn,&QPushButton::clicked, this, &MainWindow::SlotHideNotGit);
-	btn = new QPushButton("Скрыть " + Statuses::commited + " " + Statuses::pushed, this);
+
+	btn = new QPushButton("Скрыть " + Statuses::commited + ", " + Statuses::pushed + ", remote ok", this);
 	loRihgtHeader->addWidget(btn);
-	connect(btn,&QPushButton::clicked, this, &MainWindow::SlotHideCommitedPushed);
+	connect(btn,&QPushButton::clicked, this, &MainWindow::SlotHideCommitedPushedRemoteOk);
 
 	// table
 	tableWidget = new QTableWidget(this);
@@ -135,6 +137,16 @@ MainWindow::MainWindow(QWidget *parent)
 	CreateContextMenu();
 
 	LoadSettings();
+}
+
+void MainWindow::LaunchAndStartScan()
+{
+	MainWindow *w = new MainWindow;
+	w->show();
+	w->setEnabled(false);
+	QTimer::singleShot(300,[w](){
+		w->SlotScanAndCheckRemotes();
+	});
 }
 
 void MainWindow::CreateContextMenu()
@@ -266,9 +278,9 @@ void MainWindow::SetRow(int row, const GitStatus & gitStatusResult)
 	if(tableWidget->item(row,ColIndexes::commitStatus)->text() == Statuses::commited
 			&& tableWidget->item(row,ColIndexes::pushStatus)->text() == Statuses::pushed)
 	{
-		tableWidget->item(row,ColIndexes::directory)->setBackground(QColor(146,208,80));
-		tableWidget->item(row,ColIndexes::commitStatus)->setBackground(QColor(146,208,80));
-		tableWidget->item(row,ColIndexes::pushStatus)->setBackground(QColor(146,208,80));
+		tableWidget->item(row,ColIndexes::directory)->setBackground(Colors::green);
+		tableWidget->item(row,ColIndexes::commitStatus)->setBackground(Colors::green);
+		tableWidget->item(row,ColIndexes::pushStatus)->setBackground(Colors::green);
 	}
 }
 
@@ -378,7 +390,7 @@ MainWindow::UpdateRemoteRes MainWindow::UpdateRemote(int row)
 
 	tableWidget->item(row,ColIndexes::remoteOutput)->setText(result);
 
-	QColor color(146,208,80);
+	QColor color(Colors::green);
 	for(auto &update:updated) if(update != fetchAndDiffEmpty) { color = {208,146,80}; break; }
 	tableWidget->item(row,ColIndexes::remoteRepos)->setBackground(color);
 	tableWidget->setCurrentCell(row,0);
@@ -452,6 +464,7 @@ void MainWindow::SlotCheckRemotes()
 				timerChecker->Finish(true);
 				labelProgerss->deleteLater();
 				this->setEnabled(true);
+				emit SignalCheckRemotesFinished();
 				return;
 			}
 		}
@@ -473,10 +486,33 @@ void MainWindow::SlotCheckRemotes()
 			timerChecker->Finish(true);
 			labelProgerss->deleteLater();
 			this->setEnabled(true);
+			emit SignalCheckRemotesFinished();
 			return;
 		}
 	});
 	timerChecker->start(25);
+}
+
+void MainWindow::SlotScanAndCheckRemotes()
+{
+	SlotScan();
+	SlotHideNotGit();
+	SlotCheckRemotes();
+
+	static bool scanAndUpdateNow = false;
+	static bool connected = false;
+	if(!connected)
+	{
+		connect(this, &MainWindow::SignalCheckRemotesFinished, [this](){
+			if(scanAndUpdateNow)
+			{
+				SlotHideCommitedPushedRemoteOk();
+				scanAndUpdateNow = false;
+			}
+		});
+		connected = true;
+	}
+	scanAndUpdateNow = true;
 }
 
 void MainWindow::SlotHideNotGit()
@@ -486,11 +522,12 @@ void MainWindow::SlotHideNotGit()
 			tableWidget->hideRow(i);
 }
 
-void MainWindow::SlotHideCommitedPushed()
+void MainWindow::SlotHideCommitedPushedRemoteOk()
 {
 	for(int i=0; i<tableWidget->rowCount(); i++)
 		if(tableWidget->item(i,ColIndexes::commitStatus)->text() == Statuses::commited
-				&& tableWidget->item(i,ColIndexes::pushStatus)->text() == Statuses::pushed)
+				&& tableWidget->item(i,ColIndexes::pushStatus)->text() == Statuses::pushed
+				&& tableWidget->item(i,ColIndexes::remoteRepos)->backgroundColor() == Colors::green)
 			tableWidget->hideRow(i);
 }
 
@@ -526,3 +563,5 @@ void MainWindow::LoadSettings()
 		}
 	}
 }
+
+
