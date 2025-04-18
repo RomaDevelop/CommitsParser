@@ -20,6 +20,7 @@ class MainWindow : public QWidget
 	QString ReadAndGetGitExtensionsExe(QString dir, bool showInfoMessageBox);
 public:
 	MainWindow(QWidget *parent = nullptr);
+	static void LaunchAndStartScan();
 	void CreateContextMenu();
 	~MainWindow() = default;
 	void closeEvent(QCloseEvent * event);
@@ -32,11 +33,13 @@ public:
 	UpdateRemoteRes UpdateRemote(int row);
 
 private: signals:
+	void SignalCheckRemotesFinished();
 
-private slots:
+public slots:
 	void SlotScan();
 	void SlotCheckRemotes();
+	void SlotScanAndCheckRemotes();
 	void SlotHideNotGit();
-	void SlotHideCommitedPushed();
+	void SlotHideCommitedPushedRemoteOk();
 };
 #endif // MAINWINDOW_H
