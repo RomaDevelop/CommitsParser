@@ -8,9 +8,6 @@
 #include "MyQShortings.h"
 #include "MyQDialogs.h"
 
-#error C:\Users\MyslivchenkoRI\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup
-#error CommitsParser.lnk - Объект и добавить question_before_launch
-
 int main(int argc, char *argv[])
 {
 	QApplication a(argc, argv);
