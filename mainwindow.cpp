@@ -165,25 +165,25 @@ void MainWindow::CreateContextMenu()
 
 	tableWidget->addAction(mShowInExplorer);
 
-	tableWidget->addAction(new QAction);
+	tableWidget->addAction(new QAction(tableWidget));
 	tableWidget->actions().back()->setSeparator(true);
 
 	tableWidget->addAction(mUpdateLocal);
 	tableWidget->addAction(mUpdateRemote);
 	tableWidget->addAction(mUpdateLocalAndRemote);
 
-	tableWidget->addAction(new QAction);
+	tableWidget->addAction(new QAction(tableWidget));
 	tableWidget->actions().back()->setSeparator(true);
 
 	tableWidget->addAction(mCommit);
 	tableWidget->addAction(mPush);
 
-	tableWidget->addAction(new QAction);
+	tableWidget->addAction(new QAction(tableWidget));
 	tableWidget->actions().back()->setSeparator(true);
 
 	tableWidget->addAction(mOpenRepo);
 
-	tableWidget->addAction(new QAction);
+	tableWidget->addAction(new QAction(tableWidget));
 	tableWidget->actions().back()->setSeparator(true);
 
 	tableWidget->addAction(mSetGitExtensions);
