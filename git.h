@@ -11,8 +11,12 @@
 #include "MyQShortings.h"
 
 namespace Statuses {
-	const QString commited = "commited";
-	const QString pushed = "pushed";
+	inline const QString& commited()		{ static QString str = "commited"; return str; }
+	inline const QString& pushed()			{ static QString str = "pushed"; return str; }
+	inline const QString& not_pushed()		{ static QString str = "not pushed"; return str; }
+	inline const QString& behind()			{ static QString str = "behind"; return str; }
+	inline const QString& behind_unknown()	{ static QString str = "behind+unknown"; return str; }
+	inline const QString& empty_str()		{ static QString str = ""; return str; }
 }
 
 struct RemoteRepo
@@ -54,6 +58,23 @@ struct Git
 	static GitStatus DoGitCommand2(QString dirFrom, QStringList words);
 
 	static void DecodeGitCommandResult(GitStatus &gitCommandResult);
+	static const QString& DefineMainRemoteStatus(const QString &standartOutput)
+	{
+		if(standartOutput.contains("Your branch is up to date with '"))
+			return Statuses::pushed();
+
+		if(standartOutput.contains("Your branch is ahead of"))
+			return Statuses::not_pushed();
+
+		if(standartOutput.contains("Your branch is behind"))
+		{
+			if(standartOutput.contains("and can be fast-forwarded."))
+				return Statuses::behind();
+			else return Statuses::behind_unknown();
+		}
+
+		return Statuses::empty_str();
+	}
 
 	static std::vector<GitStatus> GetGitStatus(const QStringList &dirs, void(*progress)(QString));
 	static GitStatus GetGitStatusForOneDir(QProcess &process, const QString &dir);

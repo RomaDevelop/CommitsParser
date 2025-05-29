@@ -108,7 +108,7 @@ MainWindow::MainWindow(QWidget *parent)
 	loRihgtHeader->addWidget(btn);
 	connect(btn,&QPushButton::clicked, this, &MainWindow::SlotHideNotGit);
 
-	btn = new QPushButton("Скрыть " + Statuses::commited + ", " + Statuses::pushed + ", remote ok", this);
+	btn = new QPushButton("Скрыть " + Statuses::commited() + ", " + Statuses::pushed() + ", remote ok", this);
 	loRihgtHeader->addWidget(btn);
 	connect(btn,&QPushButton::clicked, this, &MainWindow::SlotHideCommitedPushedRemoteOk);
 
@@ -275,8 +275,8 @@ void MainWindow::SetRow(int row, const GitStatus & gitStatusResult)
 	tableWidget->setItem(row, ColIndexes::standartOutput	, new QTableWidgetItem(gitStatusResult.standartOutput));
 	tableWidget->setItem(row, ColIndexes::remoteOutput		, new QTableWidgetItem);
 
-	if(tableWidget->item(row,ColIndexes::commitStatus)->text() == Statuses::commited
-			&& tableWidget->item(row,ColIndexes::pushStatus)->text() == Statuses::pushed)
+	if(tableWidget->item(row,ColIndexes::commitStatus)->text() == Statuses::commited()
+			&& tableWidget->item(row,ColIndexes::pushStatus)->text() == Statuses::pushed())
 	{
 		tableWidget->item(row,ColIndexes::directory)->setBackground(Colors::green);
 		tableWidget->item(row,ColIndexes::commitStatus)->setBackground(Colors::green);
@@ -525,8 +525,8 @@ void MainWindow::SlotHideNotGit()
 void MainWindow::SlotHideCommitedPushedRemoteOk()
 {
 	for(int i=0; i<tableWidget->rowCount(); i++)
-		if(tableWidget->item(i,ColIndexes::commitStatus)->text() == Statuses::commited
-				&& tableWidget->item(i,ColIndexes::pushStatus)->text() == Statuses::pushed
+		if(tableWidget->item(i,ColIndexes::commitStatus)->text() == Statuses::commited()
+				&& tableWidget->item(i,ColIndexes::pushStatus)->text() == Statuses::pushed()
 				&& tableWidget->item(i,ColIndexes::remoteRepos)->backgroundColor() == Colors::green)
 			tableWidget->hideRow(i);
 }

@@ -77,7 +77,7 @@ void Git::DecodeGitCommandResult(GitStatus & gitCommandResult)
 	if(gitCommandResult.standartOutput.size())
 	{
 		if(gitCommandResult.standartOutput.contains("nothing to commit, working tree clean"))
-			gitCommandResult.commitStatus = Statuses::commited;
+			gitCommandResult.commitStatus = Statuses::commited();
 		else if(gitCommandResult.standartOutput.contains("Changes to be committed"))
 			gitCommandResult.commitStatus = "not commited, some added";
 		else if(gitCommandResult.standartOutput.contains("no changes added to commit"))
@@ -89,11 +89,8 @@ void Git::DecodeGitCommandResult(GitStatus & gitCommandResult)
 			gitCommandResult.commitStatus = "error unknown commit output";
 		}
 
-		if(gitCommandResult.standartOutput.contains("Your branch is up to date with '"))
-			gitCommandResult.pushStatus = Statuses::pushed;
-		else if(gitCommandResult.standartOutput.contains("Your branch is ahead of"))
-			gitCommandResult.pushStatus = "not pushed";
-		else
+		gitCommandResult.pushStatus = DefineMainRemoteStatus(gitCommandResult.standartOutput);
+		if(gitCommandResult.pushStatus.isEmpty())
 		{
 			auto res = DoGitCommand2(gitCommandResult.dir, {"remote"});
 			if(!res.success) { gitCommandResult.pushStatus = "error doing command remote: " + res.error; return; }
