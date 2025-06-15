@@ -52,11 +52,15 @@ namespace forCommitsParser {
 }
 QString MainWindow::ReadAndGetGitExtensionsExe(QString dir, bool showInfoMessageBox)
 {
+	if(GitExtensionsExe.isEmpty() && QFile::exists(filesPath+"/git_extensions_exe.txt"))
+		GitExtensionsExe = MyQFileDir::ReadFile1(filesPath+"/git_extensions_exe.txt");
+
 	if(GitExtensionsExe.isEmpty() || !QFileInfo(GitExtensionsExe).isFile())
 	{
 		if(showInfoMessageBox) QMbInfo("Укажите программу для работы с репозиториями");
 		GitExtensionsExe = QFileDialog::getOpenFileName(nullptr, "Укажите программу для работы с репозиториями",
 														dir, "*.exe");
+		MyQFileDir::WriteFile(filesPath+"/git_extensions_exe.txt", GitExtensionsExe);
 	}
 	return GitExtensionsExe;
 }
@@ -64,6 +68,8 @@ QString MainWindow::ReadAndGetGitExtensionsExe(QString dir, bool showInfoMessage
 MainWindow::MainWindow(QWidget *parent)
 	: QWidget(parent)
 {
+	if(!QDir().mkpath(filesPath)) QMbError("cant create path " + filesPath);
+
 	auto basicFont = QFont("Courier new",12);
 
 	auto layOutMain = new QVBoxLayout(this);
@@ -535,7 +541,7 @@ void MainWindow::closeEvent(QCloseEvent * event)
 {
 	ReplaceInTextEdit(textEdit);
 
-	QSettings settings(MyQDifferent::PathToExe() + "/files/settings.ini", QSettings::IniFormat);
+	QSettings settings(filesPath + "/settings.ini", QSettings::IniFormat);
 	settings.setValue("geo",saveGeometry());
 	settings.setValue("splitterCenter",splitterCenter->saveState());
 	settings.setValue("textEdit",textEdit->toPlainText());
@@ -549,7 +555,7 @@ void MainWindow::closeEvent(QCloseEvent * event)
 
 void MainWindow::LoadSettings()
 {
-	QSettings settings(MyQDifferent::PathToExe() + "/files/settings.ini", QSettings::IniFormat);
+	QSettings settings(filesPath + "/settings.ini", QSettings::IniFormat);
 	this->restoreGeometry(settings.value("geo").toByteArray());
 	splitterCenter->restoreState(settings.value("splitterCenter").toByteArray());
 	textEdit->setPlainText(settings.value("textEdit").toString());

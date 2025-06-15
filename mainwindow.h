@@ -7,6 +7,8 @@
 #include <QTextEdit>
 #include <QTableWidget>
 
+#include "MyQDifferent.h"
+
 struct GitStatus;
 
 class MainWindow : public QWidget
@@ -17,6 +19,7 @@ class MainWindow : public QWidget
 	QTextEdit *textEdit;
 	QTableWidget *tableWidget;
 	QString GitExtensionsExe;
+	QString filesPath = MyQDifferent::PathToExe() + "/files";
 	QString ReadAndGetGitExtensionsExe(QString dir, bool showInfoMessageBox);
 public:
 	MainWindow(QWidget *parent = nullptr);
