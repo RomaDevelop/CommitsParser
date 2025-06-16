@@ -12,6 +12,7 @@
 #include <QHeaderView>
 #include <QAction>
 #include <QVariant>
+#include <QProgressDialog>
 
 #include "MyCppDifferent.h"
 #include "MyQShortings.h"
@@ -99,6 +100,9 @@ MainWindow::MainWindow(QWidget *parent)
 	btn = new QPushButton(" Сканировать и обновить ", this);
 	loLeft->addWidget(btn);
 	connect(btn,&QPushButton::clicked, this, &MainWindow::SlotScanAndCheckRemotes);
+	btn = new QPushButton(" Обновить текущие ", this);
+	loLeft->addWidget(btn);
+	connect(btn,&QPushButton::clicked, this, &MainWindow::SlotScanAndCheckRemotesCurrent);
 
 	// right part
 	// header buttons
@@ -430,6 +434,7 @@ void MainWindow::SlotScan()
 	{
 		forCommitsParser::mainWindowPtr->tableWidget->item(0,0)->setText(progress);
 		forCommitsParser::mainWindowPtr->tableWidget->repaint();
+		QCoreApplication::processEvents();
 	};
 	auto result = Git::GetGitStatus(allDirs,progress);
 	tableWidget->clearContents();
@@ -443,40 +448,21 @@ void MainWindow::SlotScan()
 
 void MainWindow::SlotCheckRemotes()
 {
-	//if(tableWidget->rowCount() == 0) return;
-	this->setEnabled(false);
+	std::vector<int> validRows;
+	for(int row=0; row<tableWidget->rowCount(); row++)
+		if(tableWidget->item(row,ColIndexes::commitStatus)->text() != GitStatus::notGit)
+			validRows.push_back(row);
 
-	QLabel *labelProgerss = new QLabel("Старт");
-	labelProgerss->setWindowFlag(Qt::Tool, true);
-	labelProgerss->setAlignment(Qt::AlignCenter);
-	auto f = labelProgerss->font(); f.setPointSize(14); labelProgerss->setFont(f);
-	labelProgerss->resize(320,100);
-	labelProgerss->show();
+	QProgressDialog progressDialog("Updating...", {}, 0, validRows.size(), this);
+	int i = 0;
+	for(auto &row:validRows)
+	{
+		progressDialog.setValue(i++);
+		QCoreApplication::processEvents();
 
-	MyQTimer *timerChecker = new MyQTimer(this);
-	timerChecker->intValues["rowIndex"] = 0;
-	int *rowIndexPt = &timerChecker->intValues["rowIndex"];
-	connect(timerChecker, &QTimer::timeout, [this, timerChecker, rowIndexPt, labelProgerss](){
-		int &rowIndex = *rowIndexPt;
+		UpdateLocal(row);
 
-		labelProgerss->activateWindow();
-		labelProgerss->setText("Обновляем статус " + QSn(rowIndex) + " из " + QSn(tableWidget->rowCount()));
-
-		while(tableWidget->item(rowIndex,ColIndexes::commitStatus)->text() == GitStatus::notGit)
-		{
-			rowIndex++;
-			if(rowIndex >= tableWidget->rowCount())
-			{
-				timerChecker->Finish(true);
-				labelProgerss->deleteLater();
-				this->setEnabled(true);
-				emit SignalCheckRemotesFinished();
-				return;
-			}
-		}
-
-		UpdateLocal(rowIndex);
-		auto updateRemoteRes = UpdateRemote(rowIndex);
+		auto updateRemoteRes = UpdateRemote(row);
 		if(updateRemoteRes == stopAllChecks)
 		{
 			auto res = MyQDialogs::CustomDialog("Ошибка", "Не удалось обновить удаленный репозиторий",
@@ -485,18 +471,8 @@ void MainWindow::SlotCheckRemotes()
 			else if(res == "Прервать") { }
 			else QMbc(0,"","wrong answ [" + res + "]");
 		}
-
-		rowIndex++;
-		if(rowIndex >= tableWidget->rowCount() || updateRemoteRes == stopAllChecks)
-		{
-			timerChecker->Finish(true);
-			labelProgerss->deleteLater();
-			this->setEnabled(true);
-			emit SignalCheckRemotesFinished();
-			return;
-		}
-	});
-	timerChecker->start(25);
+	}
+	emit SignalCheckRemotesFinished();
 }
 
 void MainWindow::SlotScanAndCheckRemotes()
@@ -519,6 +495,24 @@ void MainWindow::SlotScanAndCheckRemotes()
 		connected = true;
 	}
 	scanAndUpdateNow = true;
+}
+
+void MainWindow::SlotScanAndCheckRemotesCurrent()
+{
+	std::vector<int> visibleRows;
+	for(int row=0; row<tableWidget->rowCount(); row++) if(!tableWidget->isRowHidden(row)) visibleRows.push_back(row);
+
+	QProgressDialog progressDialog("Updating...", "Cancel", 0, visibleRows.size(), this);
+	int i = 0;
+	for(auto &row:visibleRows)
+	{
+		progressDialog.setValue(i++);
+		if(progressDialog.wasCanceled()) break;
+		QCoreApplication::processEvents();
+
+		UpdateLocal(row);
+		UpdateRemote(row);
+	}
 }
 
 void MainWindow::SlotHideNotGit()

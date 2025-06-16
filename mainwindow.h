@@ -42,6 +42,8 @@ public slots:
 	void SlotScan();
 	void SlotCheckRemotes();
 	void SlotScanAndCheckRemotes();
+	void SlotScanAndCheckRemotesCurrent();
+
 	void SlotHideNotGit();
 	void SlotHideCommitedPushedRemoteOk();
 };
