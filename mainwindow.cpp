@@ -153,7 +153,6 @@ void MainWindow::LaunchAndStartScan()
 {
 	MainWindow *w = new MainWindow;
 	w->show();
-	w->setEnabled(false);
 	QTimer::singleShot(300,[w](){
 		w->SlotScanAndCheckRemotes();
 	});
