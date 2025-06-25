@@ -509,11 +509,22 @@ void MainWindow::SlotHideNotGit()
 
 void MainWindow::SlotHideCommitedPushedRemoteOk()
 {
-	for(int i=0; i<tableWidget->rowCount(); i++)
-		if(tableWidget->item(i,ColIndexes::commitStatus)->text() == Statuses::commited()
-				&& tableWidget->item(i,ColIndexes::pushStatus)->text() == Statuses::pushed()
-				&& tableWidget->item(i,ColIndexes::remoteRepos)->backgroundColor() == Colors::green)
-			tableWidget->hideRow(i);
+	bool hasVisibleRow = false;
+	for(int row=0; row<tableWidget->rowCount(); row++)
+	{
+		if(tableWidget->item(row,ColIndexes::commitStatus)->text() == Statuses::commited()
+				&& tableWidget->item(row,ColIndexes::pushStatus)->text() == Statuses::pushed()
+				&& tableWidget->item(row,ColIndexes::remoteRepos)->backgroundColor() == Colors::green)
+			tableWidget->hideRow(row);
+
+		if(!tableWidget->isRowHidden(row)) hasVisibleRow = true;
+	}
+
+	if(!hasVisibleRow)
+	{
+		tableWidget->setRowCount(tableWidget->rowCount()+1);
+		tableWidget->setItem(tableWidget->rowCount()-1,0,new QTableWidgetItem("All repos updated"));
+	}
 }
 
 void MainWindow::closeEvent(QCloseEvent * event)
