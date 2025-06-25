@@ -100,7 +100,7 @@ MainWindow::MainWindow(QWidget *parent)
 	btn = new QPushButton(" Сканировать и обновить ", this);
 	loLeft->addWidget(btn);
 	connect(btn,&QPushButton::clicked, this, &MainWindow::SlotScanAndCheckRemotes);
-	btn = new QPushButton(" Обновить текущие ", this);
+	btn = new QPushButton(" Сканировать и обновить отображаемые ", this);
 	loLeft->addWidget(btn);
 	connect(btn,&QPushButton::clicked, this, &MainWindow::SlotScanAndCheckRemotesCurrent);
 
@@ -371,7 +371,8 @@ MainWindow::UpdateRemoteRes MainWindow::UpdateRemote(int row)
 				if(difRes.success && difRes.errorOutput.isEmpty())
 				{
 					result += difRes.standartOutput;
-					if(difRes.standartOutput.isEmpty()) { result += "diff empty result\n"; if(curUpdated == fetchEmpty) curUpdated = fetchAndDiffEmpty; }
+					if(difRes.standartOutput.isEmpty()) { result += "diff empty result\n"; if(curUpdated == fetchEmpty)
+							curUpdated = fetchAndDiffEmpty; }
 					did = true;
 					break;
 				}
@@ -471,7 +472,6 @@ void MainWindow::SlotCheckRemotes()
 			else QMbc(0,"","wrong answ [" + res + "]");
 		}
 	}
-	emit SignalCheckRemotesFinished();
 }
 
 void MainWindow::SlotScanAndCheckRemotes()
@@ -479,21 +479,7 @@ void MainWindow::SlotScanAndCheckRemotes()
 	SlotScan();
 	SlotHideNotGit();
 	SlotCheckRemotes();
-
-	static bool scanAndUpdateNow = false;
-	static bool connected = false;
-	if(!connected)
-	{
-		connect(this, &MainWindow::SignalCheckRemotesFinished, [this](){
-			if(scanAndUpdateNow)
-			{
-				SlotHideCommitedPushedRemoteOk();
-				scanAndUpdateNow = false;
-			}
-		});
-		connected = true;
-	}
-	scanAndUpdateNow = true;
+	SlotHideCommitedPushedRemoteOk();
 }
 
 void MainWindow::SlotScanAndCheckRemotesCurrent()

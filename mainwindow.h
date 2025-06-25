@@ -35,9 +35,6 @@ public:
 	enum UpdateRemoteRes { ok, stopAllChecks };
 	UpdateRemoteRes UpdateRemote(int row);
 
-private: signals:
-	void SignalCheckRemotesFinished();
-
 public slots:
 	void SlotScan();
 	void SlotCheckRemotes();
