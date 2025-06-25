@@ -134,7 +134,7 @@ GitStatus Git::GetGitStatusForOneDir(QProcess &process, const QString &dir)
 	GitStatus gitStatus;
 	gitStatus.dir = dir;
 
-	if(!QDir(dir+"/.git").exists())
+	if(!QFileInfo(QString(dir).append('/').append(GitStatus::gitRepoDir())).isDir())
 	{
 		gitStatus.commitStatus = GitStatus::notGit;
 		return gitStatus;

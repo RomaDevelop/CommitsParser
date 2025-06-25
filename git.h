@@ -45,6 +45,7 @@ struct GitStatus
 	std::vector<RemoteRepo> remoteRepos;
 	QString RemoteRepoNames() const;
 
+	static const QString& gitRepoDir() { static QString str = ".git"; return str; }
 	inline static const QString notGit = "not a git repository";
 	inline static const QString notGitMarker = "fatal: not a git repository";
 

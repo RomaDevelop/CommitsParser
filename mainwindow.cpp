@@ -409,6 +409,24 @@ MainWindow::UpdateRemoteRes MainWindow::UpdateRemote(int row)
 	else return ok;
 }
 
+QStringList GetAllNestedDirs(QString path, QDir::SortFlag sort = QDir::NoSort)
+{
+	QDir dir(path);
+	QStringList res;
+	QStringList subdirs = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System, sort);
+	if(!subdirs.contains(GitStatus::gitRepoDir()))
+	{
+		for (const auto &subdir : subdirs) {
+			res << path + "/" + subdir;
+			res += GetAllNestedDirs(path + "/" + subdir);
+		}
+	}
+	return res;
+
+	/// this realisation differs from MyQFileDir by checking .git subdir and ignoring all subdirs if contains
+	/// check subdirs.contains(...) is prefere than QFileInfo(...).isDir() because if not contains we anyway will get entryList
+}
+
 void MainWindow::SlotScan()
 {
 	ReplaceInTextEdit(textEdit);
@@ -419,8 +437,7 @@ void MainWindow::SlotScan()
 	QString badDirs;
 	for(auto &dir:dirs)
 	{
-		if(QDir(dir).exists())
-			allDirs += MyQFileDir::GetAllNestedDirs(dir);
+		if(QDir(dir).exists()) allDirs += GetAllNestedDirs(dir);
 		else badDirs += "\n" + dir;
 	}
 	if(badDirs.size())
