@@ -33,7 +33,7 @@ QString GitStatus::ToStr2()
 GitStatus Git::DoGitCommand(QProcess & process, QStringList words)
 {
 	process.start("git", words);
-	if(!process.waitForStarted(1000))
+	if(!process.waitForStarted(5000))
 	{
 		qdbg << "error waitForStarted " + words.join(" ");
 		return { "", false, "error waitForStarted", "", "", "", "", {}};
