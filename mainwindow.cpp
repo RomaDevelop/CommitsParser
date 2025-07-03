@@ -21,6 +21,7 @@
 #include "MyQDialogs.h"
 #include "MyQExecute.h"
 #include "MyQTimer.h"
+#include "MyQTableWidget.h"
 
 #include "git.h"
 
@@ -197,17 +198,68 @@ void MainWindow::CreateContextMenu()
 
 	tableWidget->addAction(mSetGitExtensions);
 
-	connect(mShowInExplorer, &QAction::triggered,[this](){
-		MyQExecute::OpenDir(tableWidget->item(tableWidget->currentRow(),0)->text());
+	auto GetSelectedRowsAndAsk = [this]() -> std::set<int> {
+		auto rows = MyQTableWidget::SelectedRows(tableWidget);
+		if(rows.size() > 7)
+		{
+			auto answ = QMessageBox::question({}, "", "Selected " + QSn(rows.size()) + " rows, the operation may take a long time. Continue?");
+			if(answ == QMessageBox::No) return {};
+		}
+		return rows;
+	};
+
+	connect(mShowInExplorer, &QAction::triggered,[this, GetSelectedRowsAndAsk](){
+		auto rows = GetSelectedRowsAndAsk();
+		for(auto &row:rows)
+			MyQExecute::OpenDir(tableWidget->item(row,0)->text());
 	});
 
-	connect(mUpdateLocal, &QAction::triggered, [this](){ UpdateLocal(tableWidget->currentRow()); });
+	connect(mUpdateLocal, &QAction::triggered, [this, GetSelectedRowsAndAsk](){
+		auto rows = GetSelectedRowsAndAsk();
+		for(auto &row:rows)
+			UpdateLocal(row);
+	});
 
-	connect(mUpdateRemote, &QAction::triggered, [this](){ UpdateRemote(tableWidget->currentRow()); });
+	connect(mUpdateRemote, &QAction::triggered, [this, GetSelectedRowsAndAsk](){
+		auto rows = GetSelectedRowsAndAsk();
+		for(auto &row:rows)
+			UpdateRemote(row);
+	});
 
-	connect(mUpdateLocalAndRemote, &QAction::triggered, [mUpdateLocal, mUpdateRemote](){
-		mUpdateLocal->trigger();
-		mUpdateRemote->trigger();
+	connect(mUpdateLocalAndRemote, &QAction::triggered, [this, GetSelectedRowsAndAsk](){
+		auto rows = GetSelectedRowsAndAsk();
+		for(auto &row:rows)
+		{
+			UpdateLocal(row);
+			UpdateRemote(row);
+		}
+	});
+
+	connect(mOpenRepo, &QAction::triggered,[this, GetSelectedRowsAndAsk](){
+		auto rows = GetSelectedRowsAndAsk();
+		for(auto &row:rows)
+		{
+			QString dir = tableWidget->item(row,ColIndexes::directory)->text();
+			MyQExecute::Execute(ReadAndGetGitExtensionsExe(GitExtensionsExe, true), {dir});
+		}
+	});
+
+	connect(mCommit, &QAction::triggered,[this, GetSelectedRowsAndAsk](){
+		auto rows = GetSelectedRowsAndAsk();
+		for(auto &row:rows)
+		{
+			QString dir = tableWidget->item(row,ColIndexes::directory)->text();
+			MyQExecute::Execute(ReadAndGetGitExtensionsExe(GitExtensionsExe, true), {"commit", dir});
+		}
+	});
+
+	connect(mPush, &QAction::triggered,[this, GetSelectedRowsAndAsk](){
+		auto rows = GetSelectedRowsAndAsk();
+		for(auto &row:rows)
+		{
+			QString dir = tableWidget->item(row,ColIndexes::directory)->text();
+			MyQExecute::Execute(ReadAndGetGitExtensionsExe(GitExtensionsExe, true), {"push", dir});
+		}
 	});
 
 	connect(mSetGitExtensions, &QAction::triggered,[this](){
@@ -218,52 +270,6 @@ void MainWindow::CreateContextMenu()
 		ReadAndGetGitExtensionsExe(prevGitExtesions, false);
 
 		if(GitExtensionsExe.isEmpty()) GitExtensionsExe = prevGitExtesions;
-	});
-
-	connect(mOpenRepo, &QAction::triggered,[this](){
-		QString dir = tableWidget->item(tableWidget->currentRow(),ColIndexes::directory)->text();
-		MyQExecute::Execute(ReadAndGetGitExtensionsExe(GitExtensionsExe, true), {dir});
-		});
-
-	connect(mCommit, &QAction::triggered,[this](){
-		QString dir = tableWidget->item(tableWidget->currentRow(),ColIndexes::directory)->text();
-		MyQExecute::Execute(ReadAndGetGitExtensionsExe(GitExtensionsExe, true), {"commit", dir});
-
-//		QString commit_text = MyQDialogs::InputText("Input commit text", "Update", 800, 200);
-
-//		QProcess process;
-//		process.setWorkingDirectory(dir);
-//		GitStatus addRes = Git::DoGitCommand(process, QStringList() << "add" << ".");
-//		GitStatus commitRes;
-//		QString textRes = "git add .\n" + addRes.ToStr2();
-//		if(addRes.success && addRes.error.isEmpty() && addRes.errorOutput.isEmpty())
-//		{
-//			commitRes = Git::DoGitCommand(process, QStringList() << "commit" << "-m" << commit_text);
-//			textRes += "\n\ngit commit -m "+commit_text+"\n" + commitRes.ToStr2();
-//		}
-//		mUpdateLocal->trigger();
-//		if(!(addRes.success && addRes.error.isEmpty() && addRes.errorOutput.isEmpty()
-//				&& commitRes.success && commitRes.error.isEmpty() && commitRes.errorOutput.isEmpty()))
-//			textRes.prepend("Attention! There were errors while executing commands!\n\n");
-//		MyQDialogs::ShowText(textRes);
-	});
-
-	connect(mPush, &QAction::triggered,[this](){
-		QString dir = tableWidget->item(tableWidget->currentRow(),ColIndexes::directory)->text();
-		MyQExecute::Execute(ReadAndGetGitExtensionsExe(GitExtensionsExe, true), {"push", dir});
-
-//		QString dir = tableWidget->item(tableWidget->currentRow(),ColIndexes::directory)->text();
-//		auto remotes = tableWidget->item(tableWidget->currentRow(),ColIndexes::remoteRepos)->text().split(" ", QString::SkipEmptyParts);
-//		remotes += "Cancel push";
-//		QString remote = MyQDialogs::CustomDialog("Chose remote repo", "Chose remote repo", remotes);
-//		if(remote == "Cancel push") return;
-
-//		GitStatus pushRes = Git::DoGitCommand2(dir, QStringList() << "push" << remote << "master");
-//		//GitStatus pushRes = Git::DoGitCommand2(dir, QStringList() << "push" << "--recurse-submodules=check" << "--progress" << remote << "master");
-//		QString textRes = "git push " + remote + " master\n" + pushRes.ToStr2();
-//		if(!(pushRes.success && pushRes.error.isEmpty() && pushRes.errorOutput.isEmpty()))
-//			textRes.prepend("Attention! There were errors while executing commands!\n\n");
-//		MyQDialogs::ShowText(textRes);
 	});
 }
 
