@@ -209,7 +209,7 @@ void MainWindow::CreateContextMenu()
 	tableWidget->addAction(mSetGitExtensions);
 
 	auto GetSelectedRowsAndAsk = [this]() -> std::set<int> {
-		auto rows = MyQTableWidget::SelectedRows(tableWidget);
+		auto rows = MyQTableWidget::SelectedRows(tableWidget, true);
 		if(rows.size() > 7)
 		{
 			auto answ = QMessageBox::question({}, "", "Selected " + QSn(rows.size()) + " rows, the operation may take a long time. Continue?");
