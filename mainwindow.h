@@ -18,6 +18,8 @@ class MainWindow : public QWidget
 	QSplitter *splitterCenter;
 	QTextEdit *textEdit;
 	QTableWidget *tableWidget;
+	QCheckBox *chBoxStopAtCount = nullptr;
+	QLineEdit *leCountToStopAt = nullptr;
 	QString GitExtensionsExe;
 	QString filesPath = MyQDifferent::PathToExe() + "/files";
 	QString ReadAndGetGitExtensionsExe(QString dir, bool showInfoMessageBox);

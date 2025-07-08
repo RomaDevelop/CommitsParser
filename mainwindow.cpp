@@ -105,6 +105,16 @@ MainWindow::MainWindow(QWidget *parent)
 	loLeft->addWidget(btn);
 	connect(btn,&QPushButton::clicked, this, &MainWindow::SlotScanAndCheckRemotesCurrent);
 
+
+	chBoxStopAtCount = new QCheckBox("Остановиться на:");
+	leCountToStopAt = new QLineEdit;
+#ifdef QT_DEBUG
+	auto hloDebugStopper = new QHBoxLayout;
+	loLeft->addLayout(hloDebugStopper);
+	hloDebugStopper->addWidget(chBoxStopAtCount);
+	hloDebugStopper->addWidget(leCountToStopAt);
+#endif
+
 	// right part
 	// header buttons
 	auto loRihgtHeader = new QHBoxLayout;
@@ -449,6 +459,9 @@ void MainWindow::SlotScan()
 	if(badDirs.size())
 		QMbw(this,"Ошибка","Несуществующие директории:"+badDirs);
 
+	if(chBoxStopAtCount->isChecked())
+		while(allDirs.size() > (int)leCountToStopAt->text().toUInt()) allDirs.removeLast();
+
 	tableWidget->setRowCount(1);
 	tableWidget->showRow(0);
 	tableWidget->setItem(0,0,new QTableWidgetItem);
@@ -559,6 +572,7 @@ void MainWindow::closeEvent(QCloseEvent * event)
 	settings.setValue("splitterCenter",splitterCenter->saveState());
 	settings.setValue("textEdit",textEdit->toPlainText());
 	settings.setValue("GitExtensionsExe", GitExtensionsExe);
+	settings.setValue("leCountToStopAt", leCountToStopAt->text());
 	settings.beginGroup("table");
 	for(int i=0; i<tableWidget->columnCount(); i++)
 		settings.setValue("col"+QSn(i),tableWidget->columnWidth(i));
@@ -573,6 +587,7 @@ void MainWindow::LoadSettings()
 	splitterCenter->restoreState(settings.value("splitterCenter").toByteArray());
 	textEdit->setPlainText(settings.value("textEdit").toString());
 	GitExtensionsExe = settings.value("GitExtensionsExe").toString();
+	leCountToStopAt->setText(settings.value("leCountToStopAt").toString());
 	settings.beginGroup("table");
 	for(int i=0; i<tableWidget->columnCount(); i++)
 	{
