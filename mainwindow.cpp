@@ -8,11 +8,14 @@
 #include <QSettings>
 #include <QFileDialog>
 #include <QPushButton>
+#include <QToolButton>
 #include <QLabel>
 #include <QHeaderView>
 #include <QAction>
 #include <QVariant>
 #include <QProgressDialog>
+#include <QWinTaskbarButton>
+#include <QWinTaskbarProgress>
 
 #include "MyCppDifferent.h"
 #include "MyQShortings.h"
@@ -25,9 +28,65 @@
 
 #include "git.h"
 
+struct TaskbarProgress
+{
+	QWinTaskbarButton *taskbarButton;
+	QWinTaskbarProgress *taskbarProgress;
+
+	TaskbarProgress(QObject *parent, QWindow *window, int minimum = 0, int maximum = 1000)
+	{
+		taskbarButton = new QWinTaskbarButton(parent);
+		QObject::connect(taskbarButton, &QObject::destroyed, [this](){ taskbarButton = nullptr; taskbarProgress = nullptr; });
+		taskbarButton->setWindow(window);
+		taskbarProgress = taskbarButton->progress();
+		taskbarProgress->setMinimum(minimum);
+		taskbarProgress->setMaximum(maximum);
+	}
+	~TaskbarProgress()
+	{
+		if(taskbarProgress) taskbarProgress->setVisible(false);
+		if(taskbarButton) taskbarButton->deleteLater();
+	}
+	void SetValue(int value)
+	{
+		taskbarProgress->setVisible(true);
+		taskbarProgress->setValue(value);
+	}
+	void AddPoints(int count)
+	{
+		taskbarProgress->setVisible(true);
+		taskbarProgress->setValue(taskbarProgress->value()+count);
+	}
+};
+
+struct Progress
+{
+	QProgressDialog progressDialog;
+	TaskbarProgress taskBarProgress;
+
+	Progress(QWidget *parent, QWindow *window, int minimum = 0, int maximum = 1000):
+		progressDialog("Updating...", "Cancel", minimum, maximum, parent),
+		taskBarProgress(parent, window, minimum, maximum)
+	{
+
+	}
+	void SetValue(int value)
+	{
+		progressDialog.setValue(value);
+		taskBarProgress.SetValue(value);
+	}
+	void AddPoints(int count)
+	{
+		progressDialog.setValue(progressDialog.value()+1);
+		taskBarProgress.AddPoints(count);
+	}
+	bool WasCanceled() { return progressDialog.wasCanceled(); }
+};
+
 namespace ColIndexes {
 	const int directory			= 0;
-	const int commitStatus		= directory+1;
+	const int buttons			= directory+1;
+	const int commitStatus		= buttons+1;
 	const int pushStatus		= commitStatus+1;
 	const int remoteRepos		= pushStatus+1;
 	const int errorOutput		= remoteRepos+1;
@@ -49,9 +108,6 @@ void ReplaceInTextEdit(QTextEdit *textEdit)
 	textEdit->setPlainText(text);
 }
 
-namespace forCommitsParser {
-	MainWindow *mainWindowPtr;
-}
 QString MainWindow::ReadAndGetGitExtensionsExe(QString dir, bool showInfoMessageBox)
 {
 	if(GitExtensionsExe.isEmpty() && QFile::exists(filesPath+"/git_extensions_exe.txt"))
@@ -212,7 +268,8 @@ void MainWindow::CreateContextMenu()
 		auto rows = MyQTableWidget::SelectedRows(tableWidget, true);
 		if(rows.size() > 7)
 		{
-			auto answ = QMessageBox::question({}, "", "Selected " + QSn(rows.size()) + " rows, the operation may take a long time. Continue?");
+			auto answ = QMessageBox::question({}, "", "Selected " + QSn(rows.size())
+											  + " rows, the operation may take a long time. Continue?");
 			if(answ == QMessageBox::No) return {};
 		}
 		return rows;
@@ -226,31 +283,41 @@ void MainWindow::CreateContextMenu()
 
 	connect(mUpdateLocal, &QAction::triggered, [this, GetSelectedRowsAndAsk](){
 		auto rows = GetSelectedRowsAndAsk();
+		Progress progress(this, windowHandle(), 0, rows.size());
 		for(auto &row:rows)
+		{
 			UpdateLocal(row);
+
+			progress.AddPoints(1);
+			if(progress.WasCanceled()) break;
+			QCoreApplication::processEvents();
+		}
 	});
 
 	connect(mUpdateRemote, &QAction::triggered, [this, GetSelectedRowsAndAsk](){
 		auto rows = GetSelectedRowsAndAsk();
+		Progress progress(this, windowHandle(), 0, rows.size());
 		for(auto &row:rows)
+		{
 			UpdateRemote(row);
+
+			progress.AddPoints(1);
+			if(progress.WasCanceled()) break;
+			QCoreApplication::processEvents();
+		}
 	});
 
 	connect(mUpdateLocalAndRemote, &QAction::triggered, [this, GetSelectedRowsAndAsk](){
 		auto rows = GetSelectedRowsAndAsk();
+		Progress progress(this, windowHandle(), 0, rows.size());
 		for(auto &row:rows)
 		{
 			UpdateLocal(row);
 			UpdateRemote(row);
-		}
-	});
 
-	connect(mOpenRepo, &QAction::triggered,[this, GetSelectedRowsAndAsk](){
-		auto rows = GetSelectedRowsAndAsk();
-		for(auto &row:rows)
-		{
-			QString dir = tableWidget->item(row,ColIndexes::directory)->text();
-			MyQExecute::Execute(ReadAndGetGitExtensionsExe(GitExtensionsExe, true), {dir});
+			progress.AddPoints(1);
+			if(progress.WasCanceled()) break;
+			QCoreApplication::processEvents();
 		}
 	});
 
@@ -269,6 +336,15 @@ void MainWindow::CreateContextMenu()
 		{
 			QString dir = tableWidget->item(row,ColIndexes::directory)->text();
 			MyQExecute::Execute(ReadAndGetGitExtensionsExe(GitExtensionsExe, true), {"push", dir});
+		}
+	});
+
+	connect(mOpenRepo, &QAction::triggered,[this, GetSelectedRowsAndAsk](){
+		auto rows = GetSelectedRowsAndAsk();
+		for(auto &row:rows)
+		{
+			QString dir = tableWidget->item(row,ColIndexes::directory)->text();
+			MyQExecute::Execute(ReadAndGetGitExtensionsExe(GitExtensionsExe, true), {dir});
 		}
 	});
 
@@ -441,19 +517,19 @@ void MainWindow::SlotScan()
 	tableWidget->setRowCount(1);
 	tableWidget->showRow(0);
 	tableWidget->setItem(0,0,new QTableWidgetItem);
-	forCommitsParser::mainWindowPtr = this;
-	auto progress = [](QString progress)
+	Progress progress(this, windowHandle(), 0, allDirs.size());
+	auto progressFoo = [&progress](int did)
 	{
-		forCommitsParser::mainWindowPtr->tableWidget->item(0,0)->setText(progress);
-		forCommitsParser::mainWindowPtr->tableWidget->repaint();
+		progress.SetValue(did);
 		QCoreApplication::processEvents();
 	};
-	auto result = Git::GetGitStatus(allDirs,progress);
+	auto result = Git::GetGitStatus(allDirs, progressFoo);
 	tableWidget->clearContents();
 	tableWidget->setRowCount(result.size());
 
 	for(int i=0; i<(int)result.size(); i++)
 	{
+		CreateRow(i);
 		SetRow(i, result[i]);
 	}
 }
@@ -465,13 +541,9 @@ void MainWindow::SlotCheckRemotes()
 		if(tableWidget->item(row,ColIndexes::commitStatus)->text() != GitStatus::notGit)
 			validRows.push_back(row);
 
-	QProgressDialog progressDialog("Updating...", {}, 0, validRows.size(), this);
-	int i = 0;
+	Progress progress(this, windowHandle(), 0, validRows.size());
 	for(auto &row:validRows)
 	{
-		progressDialog.setValue(i++);
-		QCoreApplication::processEvents();
-
 		UpdateLocal(row);
 
 		auto updateRemoteRes = UpdateRemote(row);
@@ -483,6 +555,10 @@ void MainWindow::SlotCheckRemotes()
 			else if(res == "Прервать") { }
 			else QMbc(0,"","wrong answ [" + res + "]");
 		}
+
+		progress.AddPoints(1);
+		if(progress.WasCanceled()) break;
+		QCoreApplication::processEvents();
 	}
 }
 
@@ -499,16 +575,15 @@ void MainWindow::SlotScanAndCheckRemotesCurrent()
 	std::vector<int> visibleRows;
 	for(int row=0; row<tableWidget->rowCount(); row++) if(!tableWidget->isRowHidden(row)) visibleRows.push_back(row);
 
-	QProgressDialog progressDialog("Updating...", "Cancel", 0, visibleRows.size(), this);
-	int i = 0;
+	Progress progress(this, windowHandle(), 0, visibleRows.size());
 	for(auto &row:visibleRows)
 	{
-		progressDialog.setValue(i++);
-		if(progressDialog.wasCanceled()) break;
-		QCoreApplication::processEvents();
-
 		UpdateLocal(row);
 		UpdateRemote(row);
+
+		progress.AddPoints(1);
+		if(progress.WasCanceled()) break;
+		QCoreApplication::processEvents();
 	}
 }
 
@@ -544,14 +619,13 @@ void MainWindow::closeEvent(QCloseEvent * event)
 	ReplaceInTextEdit(textEdit);
 
 	QSettings settings(filesPath + "/settings.ini", QSettings::IniFormat);
+	settings.clear();
 	settings.setValue("geo",saveGeometry());
 	settings.setValue("splitterCenter",splitterCenter->saveState());
 	settings.setValue("textEdit",textEdit->toPlainText());
 	settings.setValue("GitExtensionsExe", GitExtensionsExe);
 	settings.setValue("leCountToStopAt", leCountToStopAt->text());
-	settings.beginGroup("table");
-	for(int i=0; i<tableWidget->columnCount(); i++)
-		settings.setValue("col"+QSn(i),tableWidget->columnWidth(i));
+	settings.setValue("tableHeader", tableWidget->horizontalHeader()->saveState());
 
 	event->accept();
 }
@@ -564,8 +638,8 @@ void MainWindow::LoadSettings()
 	textEdit->setPlainText(settings.value("textEdit").toString());
 	GitExtensionsExe = settings.value("GitExtensionsExe").toString();
 	leCountToStopAt->setText(settings.value("leCountToStopAt").toString());
-	settings.beginGroup("table");
-	for(int i=0; i<tableWidget->columnCount(); i++)
+	tableWidget->horizontalHeader()->restoreState(settings.value("tableHeader").toByteArray());
+}
 
 void MainWindow::CreateRow(int row)
 {

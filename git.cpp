@@ -101,14 +101,13 @@ void Git::DecodeGitCommandResult(GitStatus & gitCommandResult)
 	}
 }
 
-std::vector<GitStatus> Git::GetGitStatus(const QStringList & dirs, void (*progress)(QString))
+std::vector<GitStatus> Git::GetGitStatus(const QStringList & dirs, std::function<void(int did)> progress)
 {
 	QProcess process;
 	std::vector<GitStatus> results;
 	results.reserve(dirs.size());
 	for(int i=0; i<(int)dirs.size(); i++)
 	{
-		progress("git status did " + QSn(i) + " from " + QSn(dirs.size()));
 		results.emplace_back(GetGitStatusForOneDir(process, dirs[i]));
 
 //		for(auto &remoteRepo:results.back().remoteReposes)
@@ -124,6 +123,7 @@ std::vector<GitStatus> Git::GetGitStatus(const QStringList & dirs, void (*progre
 //				qdbg << "errorOutput	" << gitCmdRes.errorOutput;
 //			}
 //		}
+		progress(i);
 	}
 
 	return results;

@@ -1,4 +1,4 @@
-QT += core gui widgets
+QT += core gui widgets winextras
 
 CONFIG += c++17
 
