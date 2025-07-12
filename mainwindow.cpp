@@ -285,30 +285,6 @@ void MainWindow::CreateContextMenu()
 
 
 
-void MainWindow::SetRow(int row, const GitStatus & gitStatusResult)
-{
-	tableWidget->setItem(row, ColIndexes::directory,new QTableWidgetItem(gitStatusResult.dir));
-	if(gitStatusResult.error.size())
-		tableWidget->setItem(row, ColIndexes::commitStatus,new QTableWidgetItem(gitStatusResult.error));
-	else
-	{
-		tableWidget->setItem(row, ColIndexes::commitStatus,new QTableWidgetItem(gitStatusResult.commitStatus));
-		tableWidget->setItem(row, ColIndexes::pushStatus,new QTableWidgetItem(gitStatusResult.pushStatus));
-	}
-	tableWidget->setItem(row, ColIndexes::remoteRepos		, new QTableWidgetItem(gitStatusResult.RemoteRepoNames()));
-	tableWidget->setItem(row, ColIndexes::errorOutput		, new QTableWidgetItem(gitStatusResult.errorOutput));
-	tableWidget->setItem(row, ColIndexes::standartOutput	, new QTableWidgetItem(gitStatusResult.standartOutput));
-	tableWidget->setItem(row, ColIndexes::remoteOutput		, new QTableWidgetItem);
-
-	if(tableWidget->item(row,ColIndexes::commitStatus)->text() == Statuses::commited()
-			&& tableWidget->item(row,ColIndexes::pushStatus)->text() == Statuses::pushed())
-	{
-		tableWidget->item(row,ColIndexes::directory)->setBackground(Colors::green);
-		tableWidget->item(row,ColIndexes::commitStatus)->setBackground(Colors::green);
-		tableWidget->item(row,ColIndexes::pushStatus)->setBackground(Colors::green);
-	}
-}
-
 void MainWindow::UpdateLocal(int row)
 {
 	QString dir = tableWidget->item(row,ColIndexes::directory)->text();
@@ -590,11 +566,84 @@ void MainWindow::LoadSettings()
 	leCountToStopAt->setText(settings.value("leCountToStopAt").toString());
 	settings.beginGroup("table");
 	for(int i=0; i<tableWidget->columnCount(); i++)
+
+void MainWindow::CreateRow(int row)
+{
+	tableWidget->setItem(row, ColIndexes::directory,		new QTableWidgetItem());
+	//tableWidget->setCellWidget(row, ColIndexes::buttons,	CreateButtonsInRow(row)); // вызывается в SetRow только для репозиториев
+	tableWidget->setItem(row, ColIndexes::commitStatus,		new QTableWidgetItem());
+	tableWidget->setItem(row, ColIndexes::pushStatus,		new QTableWidgetItem());
+
+	tableWidget->setItem(row, ColIndexes::remoteRepos		, new QTableWidgetItem());
+	tableWidget->setItem(row, ColIndexes::errorOutput		, new QTableWidgetItem());
+	tableWidget->setItem(row, ColIndexes::standartOutput	, new QTableWidgetItem());
+	tableWidget->setItem(row, ColIndexes::remoteOutput		, new QTableWidgetItem);
+}
+
+QWidget *MainWindow::CreateButtonsInRow(int row)
+{
+	QWidget *widget = new QWidget;
+	auto hlo = new QHBoxLayout(widget);
+	hlo->setContentsMargins(0,0,0,0);
+	hlo->setSpacing(0);
+
+	auto btnUpdate = new QToolButton();
+	btnUpdate->setIcon(QApplication::style()->standardIcon(QStyle::SP_BrowserReload));
+	btnUpdate->setToolTip("Update");
+	hlo->addWidget(btnUpdate);
+
+	auto btnCommit = new QToolButton();
+	btnCommit->setIcon(QApplication::style()->standardIcon(QStyle::SP_DialogApplyButton));
+	btnUpdate->setToolTip("Commit");
+	hlo->addWidget(btnCommit);
+
+	auto btnPush = new QToolButton();
+	btnPush->setIcon(QApplication::style()->standardIcon(QStyle::SP_ArrowUp));
+	btnUpdate->setToolTip("Push");
+	hlo->addWidget(btnPush);
+
+	auto btnOpenRepo = new QToolButton();
+	btnOpenRepo->setIcon(QApplication::style()->standardIcon(QStyle::SP_DialogHelpButton));
+	btnUpdate->setToolTip("Open repository");
+	hlo->addWidget(btnOpenRepo);
+
+	connect(btnUpdate, &QToolButton::clicked, this, [this, row](){ UpdateLocal(row); UpdateRemote(row); });
+	connect(btnCommit, &QToolButton::clicked, this, [this, row](){
+		QString dir = tableWidget->item(row,ColIndexes::directory)->text();
+		MyQExecute::Execute(ReadAndGetGitExtensionsExe(GitExtensionsExe, true), {"commit", dir});	});
+	connect(btnPush, &QToolButton::clicked, this, [this, row](){
+		QString dir = tableWidget->item(row,ColIndexes::directory)->text();
+		MyQExecute::Execute(ReadAndGetGitExtensionsExe(GitExtensionsExe, true), {"push", dir});		});
+	connect(btnOpenRepo, &QToolButton::clicked, this, [this, row](){
+		QString dir = tableWidget->item(row,ColIndexes::directory)->text();
+		MyQExecute::Execute(ReadAndGetGitExtensionsExe(GitExtensionsExe, true), {dir});				});
+
+	return widget;
+}
+
+void MainWindow::SetRow(int row, const GitStatus &gitStatusResult)
+{
+	if(gitStatusResult.commitStatus != GitStatus::notGit && !tableWidget->cellWidget(row, ColIndexes::buttons))
+		tableWidget->setCellWidget(row, ColIndexes::buttons, CreateButtonsInRow(row));
+
+	tableWidget->item(row, ColIndexes::directory)->setText(gitStatusResult.dir);
+	if(gitStatusResult.error.size())
+		tableWidget->item(row, ColIndexes::commitStatus)->setText(gitStatusResult.error);
+	else
 	{
-		if(settings.contains("col"+QSn(i)))
-		{
-			tableWidget->setColumnWidth(i,settings.value("col"+QSn(i)).toInt());
-		}
+		tableWidget->item(row, ColIndexes::commitStatus)->setText(gitStatusResult.commitStatus);
+		tableWidget->item(row, ColIndexes::pushStatus)->setText(gitStatusResult.pushStatus);
+	}
+	tableWidget->item(row, ColIndexes::remoteRepos)->setText(gitStatusResult.RemoteRepoNames());
+	tableWidget->item(row, ColIndexes::errorOutput)->setText(gitStatusResult.errorOutput);
+	tableWidget->item(row, ColIndexes::standartOutput)->setText(gitStatusResult.standartOutput);
+
+	if(tableWidget->item(row,ColIndexes::commitStatus)->text() == Statuses::commited()
+			&& tableWidget->item(row,ColIndexes::pushStatus)->text() == Statuses::pushed())
+	{
+		tableWidget->item(row,ColIndexes::directory)->setBackground(Colors::green);
+		tableWidget->item(row,ColIndexes::commitStatus)->setBackground(Colors::green);
+		tableWidget->item(row,ColIndexes::pushStatus)->setBackground(Colors::green);
 	}
 }
 

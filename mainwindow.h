@@ -31,6 +31,8 @@ public:
 	void closeEvent(QCloseEvent * event);
 	void LoadSettings();
 
+	void CreateRow(int row);
+	QWidget* CreateButtonsInRow(int row);
 	void SetRow(int row, const GitStatus &gitStatusResult);
 
 	void UpdateLocal(int row);
