@@ -23,7 +23,6 @@
 #include "MyQFileDir.h"
 #include "MyQDialogs.h"
 #include "MyQExecute.h"
-#include "MyQTimer.h"
 #include "MyQTableWidget.h"
 
 #include "git.h"
@@ -98,7 +97,7 @@ namespace ColIndexes {
 
 namespace Colors {
 	const QColor green(146,208,80);
-
+	const QColor white(Qt::white);
 }
 
 void ReplaceInTextEdit(QTextEdit *textEdit)
@@ -624,6 +623,7 @@ void MainWindow::closeEvent(QCloseEvent * event)
 	settings.setValue("splitterCenter",splitterCenter->saveState());
 	settings.setValue("textEdit",textEdit->toPlainText());
 	settings.setValue("GitExtensionsExe", GitExtensionsExe);
+	settings.setValue("chBoxStopAtCount", chBoxStopAtCount->isChecked());
 	settings.setValue("leCountToStopAt", leCountToStopAt->text());
 	settings.setValue("tableHeader", tableWidget->horizontalHeader()->saveState());
 
@@ -637,6 +637,7 @@ void MainWindow::LoadSettings()
 	splitterCenter->restoreState(settings.value("splitterCenter").toByteArray());
 	textEdit->setPlainText(settings.value("textEdit").toString());
 	GitExtensionsExe = settings.value("GitExtensionsExe").toString();
+	chBoxStopAtCount->setChecked(settings.value("chBoxStopAtCount").toBool());
 	leCountToStopAt->setText(settings.value("leCountToStopAt").toString());
 	tableWidget->horizontalHeader()->restoreState(settings.value("tableHeader").toByteArray());
 }
@@ -661,33 +662,38 @@ QWidget *MainWindow::CreateButtonsInRow(int row)
 	hlo->setContentsMargins(0,0,0,0);
 	hlo->setSpacing(0);
 
+	auto btnOpen = new QToolButton();
+	btnOpen->setIcon(QApplication::style()->standardIcon(QStyle::SP_DirOpenIcon));
+	btnOpen->setToolTip("Open");
+	hlo->addWidget(btnOpen);
+	connect(btnOpen, &QToolButton::clicked, this, [this, row](){ MyQExecute::OpenDir(tableWidget->item(row,0)->text()); });
+
 	auto btnUpdate = new QToolButton();
 	btnUpdate->setIcon(QApplication::style()->standardIcon(QStyle::SP_BrowserReload));
 	btnUpdate->setToolTip("Update");
 	hlo->addWidget(btnUpdate);
+	connect(btnUpdate, &QToolButton::clicked, this, [this, row](){ UpdateLocal(row); UpdateRemote(row); });
 
 	auto btnCommit = new QToolButton();
 	btnCommit->setIcon(QApplication::style()->standardIcon(QStyle::SP_DialogApplyButton));
 	btnUpdate->setToolTip("Commit");
 	hlo->addWidget(btnCommit);
+	connect(btnCommit, &QToolButton::clicked, this, [this, row](){
+		QString dir = tableWidget->item(row,ColIndexes::directory)->text();
+		MyQExecute::Execute(ReadAndGetGitExtensionsExe(GitExtensionsExe, true), {"commit", dir});	});
 
 	auto btnPush = new QToolButton();
 	btnPush->setIcon(QApplication::style()->standardIcon(QStyle::SP_ArrowUp));
 	btnUpdate->setToolTip("Push");
 	hlo->addWidget(btnPush);
+	connect(btnPush, &QToolButton::clicked, this, [this, row](){
+		QString dir = tableWidget->item(row,ColIndexes::directory)->text();
+		MyQExecute::Execute(ReadAndGetGitExtensionsExe(GitExtensionsExe, true), {"push", dir});		});
 
 	auto btnOpenRepo = new QToolButton();
 	btnOpenRepo->setIcon(QApplication::style()->standardIcon(QStyle::SP_DialogHelpButton));
 	btnUpdate->setToolTip("Open repository");
 	hlo->addWidget(btnOpenRepo);
-
-	connect(btnUpdate, &QToolButton::clicked, this, [this, row](){ UpdateLocal(row); UpdateRemote(row); });
-	connect(btnCommit, &QToolButton::clicked, this, [this, row](){
-		QString dir = tableWidget->item(row,ColIndexes::directory)->text();
-		MyQExecute::Execute(ReadAndGetGitExtensionsExe(GitExtensionsExe, true), {"commit", dir});	});
-	connect(btnPush, &QToolButton::clicked, this, [this, row](){
-		QString dir = tableWidget->item(row,ColIndexes::directory)->text();
-		MyQExecute::Execute(ReadAndGetGitExtensionsExe(GitExtensionsExe, true), {"push", dir});		});
 	connect(btnOpenRepo, &QToolButton::clicked, this, [this, row](){
 		QString dir = tableWidget->item(row,ColIndexes::directory)->text();
 		MyQExecute::Execute(ReadAndGetGitExtensionsExe(GitExtensionsExe, true), {dir});				});
@@ -698,7 +704,11 @@ QWidget *MainWindow::CreateButtonsInRow(int row)
 void MainWindow::SetRow(int row, const GitStatus &gitStatusResult)
 {
 	if(gitStatusResult.commitStatus != GitStatus::notGit && !tableWidget->cellWidget(row, ColIndexes::buttons))
-		tableWidget->setCellWidget(row, ColIndexes::buttons, CreateButtonsInRow(row));
+	{
+		auto cellWidget = CreateButtonsInRow(row);
+		cellWidget->setObjectName("cellWidgetForButtons");
+		tableWidget->setCellWidget(row, ColIndexes::buttons, cellWidget);
+	}
 
 	tableWidget->item(row, ColIndexes::directory)->setText(gitStatusResult.dir);
 	if(gitStatusResult.error.size())
@@ -718,6 +728,18 @@ void MainWindow::SetRow(int row, const GitStatus &gitStatusResult)
 		tableWidget->item(row,ColIndexes::directory)->setBackground(Colors::green);
 		tableWidget->item(row,ColIndexes::commitStatus)->setBackground(Colors::green);
 		tableWidget->item(row,ColIndexes::pushStatus)->setBackground(Colors::green);
+
+		if(auto cellWidget = tableWidget->cellWidget(row, ColIndexes::buttons); cellWidget)
+			cellWidget->setStyleSheet("#cellWidgetForButtons " /*"QWidget "*/ "{ background-color: "+Colors::green.name()+"; }");
+	}
+	else
+	{
+		tableWidget->item(row,ColIndexes::directory)->setBackground(Colors::white);
+		tableWidget->item(row,ColIndexes::commitStatus)->setBackground(Colors::white);
+		tableWidget->item(row,ColIndexes::pushStatus)->setBackground(Colors::white);
+
+		if(auto cellWidget = tableWidget->cellWidget(row, ColIndexes::buttons); cellWidget)
+			cellWidget->setStyleSheet(this->styleSheet());
 	}
 }
 
