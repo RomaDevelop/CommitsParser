@@ -480,14 +480,17 @@ QStringList GetAllNestedDirs(QString path, QDir::SortFlag sort = QDir::NoSort)
 {
 	QDir dir(path);
 	QStringList res;
-	QStringList subdirs = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System, sort);
-	if(!subdirs.contains(GitStatus::gitRepoDir()))
-	{
-		for (const auto &subdir : subdirs) {
-			res << path + "/" + subdir;
-			res += GetAllNestedDirs(path + "/" + subdir);
-		}
+	auto subdirsInfos = dir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System, sort);
+	for (const auto &subdir : subdirsInfos)
+		if(subdir.fileName() == GitStatus::gitRepoDir()) return res;
+
+	for (const auto &subdirInfo : subdirsInfos) {
+		if(!subdirInfo.isDir()) continue; // дебильная entryInfoList выдает ярлыки несмотря на то что стоит QDir::Dirs
+		res.append(QString());
+		res.back() = subdirInfo.absoluteFilePath();
+		res += GetAllNestedDirs(subdirInfo.absoluteFilePath());
 	}
+
 	return res;
 
 	/// this realisation differs from MyQFileDir by checking .git subdir and ignoring all subdirs if contains
