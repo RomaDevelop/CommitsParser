@@ -1,5 +1,10 @@
 #include "mainwindow.h"
 
+#include <queue>
+#include <mutex>
+#include <condition_variable>
+#include <future>
+
 #include <QProcess>
 #include <QDebug>
 #include <QHBoxLayout>
@@ -476,18 +481,99 @@ MainWindow::UpdateRemoteRes MainWindow::UpdateRemote(int row)
 	else return ok;
 }
 
-QStringList GetAllNestedDirs(QString path, QDir::SortFlag sort = QDir::NoSort)
-{
-	QDir dir(path);
-	QStringList res;
-	QStringList subdirs = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System, sort);
-	if(!subdirs.contains(GitStatus::gitRepoDir()))
-	{
-		for (const auto &subdir : subdirs) {
-			res << path + "/" + subdir;
-			res += GetAllNestedDirs(path + "/" + subdir);
+class async_mult {
+public:
+	async_mult() : done(false) {
+		worker = std::thread([this]() { this->run(); });
+	}
+
+	~async_mult() {
+		{
+			std::unique_lock<std::mutex> lock(mtx);
+			done = true;
+		}
+		cv.notify_one();
+		if (worker.joinable())
+			worker.join();
+	}
+
+	template<typename Func, typename... Args>
+	auto async(Func&& f, Args&&... args) {
+		using RetType = std::invoke_result_t<Func, Args...>;
+		auto task = std::make_shared<std::packaged_task<RetType()>>(
+			std::bind(std::forward<Func>(f), std::forward<Args>(args)...)
+		);
+		std::future<RetType> fut = task->get_future();
+		{
+			std::unique_lock<std::mutex> lock(mtx);
+			tasks.push([task]() { (*task)(); });
+		}
+		cv.notify_one();
+		return fut;
+	}
+
+private:
+	void run() {
+		while (true) {
+			std::function<void()> task;
+			{
+				std::unique_lock<std::mutex> lock(mtx);
+				cv.wait(lock, [this]() { return done || !tasks.empty(); });
+				if (done && tasks.empty())
+					return;
+				task = std::move(tasks.front());
+				tasks.pop();
+			}
+			task();
 		}
 	}
+
+	std::thread worker;
+	std::queue<std::function<void()>> tasks;
+	std::mutex mtx;
+	std::condition_variable cv;
+	bool done;
+};
+
+std::pair<bool, QStringList> GetAllNestedDirs(QString path, QDir::SortFlag sort = QDir::NoSort)
+{
+	QDir dir(path);
+	std::pair<bool, QStringList> res {true, {}};
+
+	static async_mult async_mult;
+	auto futureEntryList = async_mult.async([sort, dir](){
+		return dir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System, sort);
+	});
+
+	QFileInfoList subdirsInfos;
+	if (futureEntryList.wait_for(std::chrono::milliseconds(3000)) == std::future_status::ready)
+	{
+		subdirsInfos = futureEntryList.get();
+	}
+	else
+	{
+		QMbError("Сканирование было аварийно остановлено на каталоге\n\n" + path
+				 + "\n\nЕго сканирование приводит к зависанию. Вероятно, в нём проблемные файлы.");
+		res.first = false;
+		return res;
+	}
+
+	for (const auto &subdir : subdirsInfos)
+		if(subdir.fileName() == GitStatus::gitRepoDir()) return res;
+
+	for (const auto &subdirInfo : subdirsInfos) {
+
+		if(!subdirInfo.isDir()) continue; // дебильная entryInfoList выдает ярлыки несмотря на то что стоит QDir::Dirs
+
+		res.second.append(QString());
+		res.second.back() = subdirInfo.absoluteFilePath();
+
+		auto resForSubdir = GetAllNestedDirs(subdirInfo.absoluteFilePath());
+		res.second += resForSubdir.second;
+
+		if(!resForSubdir.first) { res.first = resForSubdir.first; break; }
+	}
+
 	return res;
 
 	/// this realisation differs from MyQFileDir by checking .git subdir and ignoring all subdirs if contains
@@ -504,7 +590,12 @@ void MainWindow::SlotScan()
 	QString badDirs;
 	for(auto &dir:dirs)
 	{
-		if(QDir(dir).exists()) allDirs += GetAllNestedDirs(dir);
+		if(QDir(dir).exists())
+		{
+			auto res = GetAllNestedDirs(dir);
+			allDirs += res.second;
+			if(!res.first) break;
+		}
 		else badDirs += "\n" + dir;
 	}
 	if(badDirs.size())
