@@ -592,6 +592,7 @@ void MainWindow::SlotScan()
 	{
 		if(QDir(dir).exists())
 		{
+			allDirs += dir;
 			auto res = GetAllNestedDirs(dir);
 			allDirs += res.second;
 			if(!res.first) break;
