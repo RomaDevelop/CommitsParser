@@ -79,6 +79,7 @@ struct Git
 
 	static std::vector<GitStatus> GetGitStatus(const QStringList &dirs, std::function<void(int did)> progress);
 	static GitStatus GetGitStatusForOneDir(QProcess &process, const QString &dir);
+	static GitStatus GetGitStatusForOneDir(const QString &dir);
 };
 
 #endif // GIT_H
