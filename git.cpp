@@ -171,5 +171,11 @@ GitStatus Git::GetGitStatusForOneDir(QProcess &process, const QString &dir)
 	return gitStatus;
 }
 
+GitStatus Git::GetGitStatusForOneDir(const QString &dir)
+{
+	QProcess process;
+	return GetGitStatusForOneDir(process, dir);
+}
+
 
 
