@@ -1,5 +1,6 @@
 #include "git.h"
 
+#include <QDateTime>
 
 QString GitStatus::RemoteRepoNames() const
 {
@@ -36,14 +37,14 @@ GitStatus Git::DoGitCommand(QProcess & process, QStringList words)
 	if(!process.waitForStarted(5000))
 	{
 		qdbg << "error waitForStarted " + words.join(" ");
-		return { "", false, "error waitForStarted", "", "", "", "", {}};
+		return { "", false, "error waitForStarted", "", "", "", "", {}, {}};
 	}
-	if(!process.waitForFinished(10000))
+	if(!process.waitForFinished(20000))
 	{
 		qdbg << "error waitForFinished " + words.join(" ");
-		return { "", false, "error waitForFinished", "", "", "", "", {}};
+		return { "", false, "error waitForFinished", "", "", "", "", {}, {}};
 	}
-	return { process.workingDirectory(), true, "", process.readAllStandardOutput(), process.readAllStandardError(), "", "", {}};
+	return { process.workingDirectory(), true, "", process.readAllStandardOutput(), process.readAllStandardError(), "", "", {}, {}};
 }
 
 GitStatus Git::DoGitCommand2(QString dirFrom, QStringList words)
@@ -129,7 +130,7 @@ std::vector<GitStatus> Git::GetGitStatus(const QStringList & dirs, std::function
 	return results;
 }
 
-GitStatus Git::GetGitStatusForOneDir(QProcess &process, const QString &dir)
+GitStatus Git::GetGitStatusForOneDir(QProcess &process, const QString &dir, bool askLastCommitDate)
 {
 	GitStatus gitStatus;
 	gitStatus.dir = dir;
@@ -168,13 +169,26 @@ GitStatus Git::GetGitStatusForOneDir(QProcess &process, const QString &dir)
 		newRepo.errors = "remote error\n";
 	}
 
+	if(askLastCommitDate)
+	{
+		auto gitCmdRes = DoGitCommand(process, QStringList() << "log" << "-1" << "--format=%ct");
+		if(gitCmdRes.success && gitCmdRes.errorOutput.isEmpty())
+		{
+			gitStatus.lastCommitDate = QDateTime::fromSecsSinceEpoch(gitCmdRes.standartOutput.trimmed().toLongLong());
+		}
+		else
+		{
+			gitStatus.error += "log date error";
+		}
+	}
+
 	return gitStatus;
 }
 
-GitStatus Git::GetGitStatusForOneDir(const QString &dir)
+GitStatus Git::GetGitStatusForOneDir(const QString &dir, bool askLastCommitDate)
 {
 	QProcess process;
-	return GetGitStatusForOneDir(process, dir);
+	return GetGitStatusForOneDir(process, dir, askLastCommitDate);
 }
 
 

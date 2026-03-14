@@ -6,7 +6,8 @@
 #include <QDir>
 #include <QProcess>
 #include <QString>
-#include <QtDebug>
+#include <QDebug>
+#include <QDateTime>
 
 #include "MyQShortings.h"
 
@@ -32,7 +33,7 @@ struct GitStatus
 {
 	QString dir;
 
-	bool success;
+	bool success = false;
 
 	QString error;
 
@@ -41,6 +42,8 @@ struct GitStatus
 
 	QString commitStatus;
 	QString pushStatus;
+
+	QDateTime lastCommitDate;
 
 	std::vector<RemoteRepo> remoteRepos;
 	QString RemoteRepoNames() const;
@@ -78,8 +81,8 @@ struct Git
 	}
 
 	static std::vector<GitStatus> GetGitStatus(const QStringList &dirs, std::function<void(int did)> progress);
-	static GitStatus GetGitStatusForOneDir(QProcess &process, const QString &dir);
-	static GitStatus GetGitStatusForOneDir(const QString &dir);
+	static GitStatus GetGitStatusForOneDir(QProcess &process, const QString &dir, bool askLastCommitDate = false);
+	static GitStatus GetGitStatusForOneDir(const QString &dir, bool askLastCommitDate = false);
 };
 
 #endif // GIT_H
